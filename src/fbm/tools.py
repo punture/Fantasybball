@@ -433,6 +433,19 @@ def streaming_plan(
 
 
 @tool()
+def protect_plan(day: str | None = None, opponent: str | None = None, top: int = 3) -> dict:
+    """Late-week protection advisor (best Thu-Sun): when FG%, FT% or TO is close, which benchings raise this week's
+    odds. Each of my players with an unstarted game is simulated benched on one ET day or through the end of the
+    week, plus greedy pairs and everyone (protect_mode), against the normal lineup with common random numbers (a
+    bench player with a game may start instead). Returns `recommendation` (one line), `actions` (gain >=
+    protect.min_gain_*, best first; per-category win odds before/after, net expected cats and P(win week), exact
+    `steps` for the owner), `volume` (play every game / don't stream), `contested_categories`. Objective: expected cats,
+    or P(win week) in one-win-per-week leagues. day: ET date the benching can start (default today; games already
+    under way are locked). Analysis only: the owner makes the change in Yahoo."""
+    return svc.protect_plan(day, opponent, top)
+
+
+@tool()
 def evaluate_trade(partner: str, give: str, get: str) -> dict:
     """Evaluate a trade for BOTH sides (season-level): expected categories per week vs the league before/after,
     category win-rate deltas, G deltas, forced drops / free-agent fills, verdict. The partner's side is also judged

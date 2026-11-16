@@ -1292,6 +1292,7 @@ from fbm import (  # noqa: E402,F401  (each module registers its commands on `ap
     cli_automation,  # `fbm automation`
     cli_hashtag,  # `fbm hashtag` (Hashtag Basketball Premium)
     cli_migrate,  # `fbm migrate` (one-off local data migrations)
+    cli_protect,  # `fbm protect` (late-week protection advisor)
     cli_setup,  # setup, backup, sync-memory
     cli_tool,  # `fbm tool` (the agent-facing tools)
     cli_yahoo,  # Yahoo league commands

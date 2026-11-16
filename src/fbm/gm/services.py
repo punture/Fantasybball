@@ -9,7 +9,7 @@ import difflib
 import json
 import unicodedata
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
@@ -3992,4 +3992,133 @@ def league_intel(n: int = 800, top: int = 5) -> dict[str, Any]:
         "(their category surplus x my need + my surplus x their need), then trade count; a partner's fit is "
         "discounted by its trade acceptance only after trade_offers.min_outcomes recorded responses "
         "(`trade_offers.acceptance_weight`; below that the counts are shown, never weighted)",
+    }
+
+
+# ------------------------------------------------------------------ late-week protection (protect_plan)
+
+if TYPE_CHECKING:
+    from fbm.analytics.protect import Option, ProtectContext, ProtectPlan
+
+
+def _protect_view(
+    pctx: ProtectContext, plan: ProtectPlan, option: Option, names: dict[str, str], with_steps: bool = True
+) -> dict[str, Any]:
+    """One option as compact JSON: who sits, gains, per-category win odds before/after, reason, owner steps."""
+    from fbm.analytics import protect
+
+    out: dict[str, Any] = {
+        "kind": option.kind,
+        "players": [names.get(pid, pid) for pid in option.players],
+        "gain_expected_cats": _r(option.gain_cats, 3),
+        "gain_p_win_week": _r(option.gain_p_win, 3),
+        "games_lost": plan.baseline_games - option.games,
+        "win_odds": {
+            c.label: [_r(a), _r(b)]
+            for c, a, b in protect.category_changes(option, plan.baseline)
+            if abs(b - a) >= 0.005
+        },
+        "reason": protect.reason(pctx, option, plan, names),
+    }
+    if with_steps:
+        out["days_et"] = {names.get(pid, pid): [d.isoformat() for d in days] for pid, days in option.sits}
+        out["steps"] = protect.steps(pctx, option, names)
+    return out
+
+
+@_ht.gated
+def protect_plan(
+    day: str | None = None, opponent: str | None = None, top: int = 3, n: int | None = None
+) -> dict[str, Any]:
+    """Late-week protection advisor: benchings (one player for a day or the rest of the week, greedy pairs, everyone)
+    that raise this week's odds by protecting close FG%/FT%/TO, scored with common random numbers against the
+    normal lineup, with exact manual steps. FBM changes nothing."""
+    from fbm.analytics import protect
+    from fbm.analytics.bank import DrawBank
+    from fbm.analytics.lineup import started_teams
+
+    league, c, conn = active_league(), ctx(), _conn()
+    me, opp = league.my_team, _team(league, opponent)
+    today = nba_today()
+    target = parse_date(day) if day else today
+    if target < today:
+        raise GMError(
+            f"{target} is in the past (today is {today} ET): only games that have not started can be benched."
+        )
+    first, ws, we = _week_window(target)
+    days = date_range(max(ws, today), we)
+    actionable = [d for d in days if d >= first]
+    if not actionable:
+        raise GMError(f"No game days left in the fantasy week {ws}..{we}.")
+    playing = teams_playing(conn, ws, we)
+    value = _value(c, _strategy_punts(None)).to_dict()
+    models = c.models([*me.player_ids(), *opp.player_ids()], conn)
+    back = c.return_dates(conn)
+    banked, skip = _live_week(league, ws)
+    rows = conn.execute("SELECT * FROM games WHERE et_date = ? AND season_type = 2", (today.isoformat(),)).fetchall()
+    locked = {today: started_teams(rows, datetime.now(UTC))}
+    sims = int(n or C("protect.sims"))
+    bank = DrawBank(models, n_sims=sims, seed=29)
+    slots = league.starting_slots()
+    _, opp_plans = plan_team_week(opp, days, playing, slots, value, back)
+    pctx = protect.ProtectContext(
+        players=list(me.players),
+        days=days,
+        actionable=actionable,
+        playing=playing,
+        starting_slots=slots,
+        value=value,
+        bank=bank,
+        opp_totals=bank.total(_remaining_games(opp, opp_plans, skip), banked.get(opp.team_key, {})),
+        categories=league.categories,
+        banked=banked.get(me.team_key, {}),
+        skip=skip,
+        locked=locked,
+        return_dates=back,
+    )
+    metric = _scoring_metric()
+    plan = protect.advise(pctx, metric)
+    names = {p.player_id: p.name for p in me.players}
+    guide = protect.guidance(pctx, plan, names)
+    close_protect, close_volume = protect.close_categories(plan.baseline)
+    tipped = locked[today] & playing.get(today, set())
+    late = actionable[0].weekday() >= 3
+    notes = [
+        "FBM never changes your league: make these lineup changes in Yahoo yourself. Steps are changes on top of "
+        "FBM's normal daily lineup (lineup_steps); set that first.",
+        "Win odds count a tie as half. objective = what the league scores (expected_cats: every category counts; "
+        "p_win_week: one win per week); both changes are reported.",
+        "Games already under way are locked: they still count but cannot be benched.",
+        "The opponent's lineup is assumed optimal and their streaming is not modeled; re-run after late injury news.",
+    ]
+    if not late:
+        notes.append("Early in the week the ratio categories still move a lot; protection usually pays Thu-Sun.")
+    return {
+        "me": me.name,
+        "opponent": opp.name,
+        "window_et": f"{days[0]}..{we}",
+        "actionable_from_et": actionable[0].isoformat(),
+        "late_week": late,
+        "objective": metric,
+        "min_gain": plan.min_gain,
+        "banked_this_week": bool(banked.get(me.team_key) or banked.get(opp.team_key)),
+        "baseline": {
+            "expected_cats": _r(plan.baseline.expected_score),
+            "p_win_week": _r(protect.p_win_week(plan.baseline)),
+            "win_odds": {o.category.label: _r(protect.share(o)) for o in plan.baseline.categories},
+            "games_left": plan.baseline_games,
+        },
+        "contested_categories": {  # win odds within lineup.swing_band of 50% with the normal lineup
+            "ratio_to": [k.label for k in close_protect],
+            "counting": [k.label for k in close_volume],
+        },
+        "recommendation": guide["recommendation"],
+        "volume": guide["volume"],
+        "actions": [_protect_view(pctx, plan, o, names) for o in plan.actions[: max(0, top)]],
+        "protect_mode": _protect_view(pctx, plan, plan.sit_all, names, with_steps=False) if plan.sit_all else None,
+        "locked_game_started": sorted(p.name for p in me.players if p.nba_team in tipped),
+        "options_evaluated": plan.evaluated,
+        "notes": notes,
+        "method": f"{sims} simulated weeks per option, common random numbers; my daily lineups re-planned per option "
+        "(a bench player with a game may start instead)",
     }

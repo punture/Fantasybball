@@ -24,3 +24,14 @@ Run as the `gm` agent but keep it short and cheap. No proposals, no market scan.
 6. Only if something changed or needs the owner: `send_email` kind `alert` with the recommended steps
    and the reason (e.g. "X ruled OUT 40 min before tip; started Y instead").
 7. If nothing changed, do not email. Journal only when a new recommendation was sent (`journal_append`).
+
+## Late-week protection (Thu-Sun ET)
+
+When `optimize_lineup`'s `swing_categories` include FG%, FT% or TO (or the owner asks whether to sit someone), run
+`protect_plan(day)` once per ET day (again only after injury news). It simulates benching each player with an
+unstarted game (one day or the rest of the week), pairs, and everyone, against the normal lineup.
+
+- Non-empty `actions`: put the top action's `reason` and exact `steps` in the alert (the owner benches the player in
+  Yahoo; FBM changes nothing). Quote its numbers, never your own.
+- `volume`: play every game (close counting categories) or skip streaming (benching everyone wins more).
+- Empty `actions`: the normal lineup stands; say nothing.
