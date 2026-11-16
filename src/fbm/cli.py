@@ -910,13 +910,11 @@ def profile(
 
 # ---------------------------------------------------------------- Notifications
 
-notify_app = typer.Typer(no_args_is_help=True, help="Email notifications (Gmail).")
+notify_app = typer.Typer(no_args_is_help=True, help="Notifications: Telegram, OpenClaw and Gmail (docs/telegram.md).")
 app.add_typer(notify_app, name="notify")
 
 
-@notify_app.command("setup")
-def notify_setup() -> None:
-    """Store your Gmail address + App Password in your OS credential store."""
+def _setup_gmail() -> None:
     console.print(
         "Create an App Password at https://myaccount.google.com/apppasswords (requires 2-Step "
         "Verification). It's 16 letters; spaces are ignored."
@@ -933,23 +931,139 @@ def notify_setup() -> None:
             raise typer.Exit(code=1)
     credentials.put(credentials.GMAIL_ADDRESS, address)
     credentials.put(credentials.GMAIL_APP_PASSWORD, password)
-    console.print("[green]Saved.[/] Run `fbm notify test`.")
+
+
+def _telegram_token() -> str:
+    from fbm.notify import telegram
+
+    console.print(
+        "Paste your bot token from @BotFather (input hidden; docs/telegram.md). Press Enter to keep a stored token."
+    )
+    typed = _printable(typer.prompt("Bot token", hide_input=True, default="", show_default=False))
+    if not typed:
+        stored = telegram.stored_token()
+        if not stored:
+            _fail("No bot token entered: create a bot with @BotFather, then run `fbm notify setup` again.")
+        return stored
+    if not telegram.TOKEN_RE.match(typed):
+        console.print("[yellow]Warning:[/] that doesn't look like a bot token (digits, a colon, then ~35 characters).")
+        if not typer.confirm("Save anyway?", default=False):
+            raise typer.Exit(code=1)
+    credentials.put(credentials.TELEGRAM_BOT_TOKEN, typed)
+    return typed
+
+
+def _telegram_chat_id(given: str | None, current: str, token: str | None, detect: bool) -> str:
+    from fbm.notify import telegram
+    from fbm.notify.setup import CHAT_ID_RE
+
+    suggestion = current
+    if not given and detect and token:
+        console.print(
+            "[yellow]Note:[/] this reads your bot's recent messages with ONE getUpdates call. If OpenClaw (or another "
+            "program) polls this bot, it may see a one-off conflict; you can use OpenClaw's pairing message instead."
+        )
+        typer.confirm("Send any message to your bot now. Done?", default=True)
+        try:
+            chats = telegram.detect_chat_ids(token)
+        except telegram.TelegramError as err:
+            console.print(str(err), style="yellow", markup=False)
+            chats = []
+        for c in chats:
+            console.print(f"  {c['chat_id']}  {c['name']} ({c['type']})", markup=False, highlight=False)
+        if len(chats) == 1:
+            suggestion = chats[0]["chat_id"]
+        elif not chats:
+            console.print("No recent messages found.")
+    elif not given:
+        console.print(
+            "Your chat id: send your bot a message, then open https://api.telegram.org/bot<token>/getUpdates in a "
+            'browser and read "chat":{"id":...} (or take it from OpenClaw\'s pairing message). '
+            "`fbm notify setup --detect-chat-id` can read it for you.",
+            markup=False,
+        )
+    value = (given or typer.prompt("Telegram chat id", default=suggestion or None)).strip()
+    if not CHAT_ID_RE.match(value):
+        _fail(f"{value!r} is not a Telegram chat id (digits, e.g. 123456789; groups start with -).")
+    return value
+
+
+@notify_app.command("setup")
+def notify_setup(
+    channels: str = typer.Option(None, "--channels", help="Comma list, in order: telegram, openclaw, email."),
+    chat_id: str = typer.Option(None, "--chat-id", help="Your numeric Telegram chat id."),
+    openclaw_bin: str = typer.Option(None, "--openclaw-bin", help="OpenClaw CLI (name on PATH or full path)."),
+    detect_chat_id: bool = typer.Option(
+        False, "--detect-chat-id", help="Read your chat id from the bot's recent messages (one getUpdates call)."
+    ),
+) -> None:
+    """Choose where alerts and digests go (Telegram bot, OpenClaw, Gmail) and store what each needs. Secrets go to
+    your OS credential store; [notify] in config/settings.toml gets the channels and chat id."""
+    from fbm.notify import openclaw
+    from fbm.notify.setup import parse_channels, save_notify_settings
+    from fbm.settings import load_settings
+
+    current = load_settings()
+    if channels is None:
+        console.print(
+            "Channels, in order: [bold]telegram[/] (your own Telegram bot, direct), [bold]openclaw[/] (through your "
+            "OpenClaw assistant; falls back to telegram when both are on), [bold]email[/] (Gmail)."
+        )
+        channels = typer.prompt("Channels", default=",".join(current.notify_channels) or "telegram")
+    try:
+        chosen = parse_channels(channels)
+        values: dict[str, object] = {"channels": chosen, "email_enabled": "email" in chosen}
+        if "telegram" in chosen or "openclaw" in chosen:
+            token = _telegram_token() if "telegram" in chosen or detect_chat_id else None
+            values["telegram_chat_id"] = _telegram_chat_id(chat_id, current.telegram_chat_id, token, detect_chat_id)
+        if "openclaw" in chosen:
+            binary = openclaw_bin or typer.prompt(
+                "OpenClaw CLI (name on PATH or full path)", default=current.openclaw_bin
+            )
+            values["openclaw_bin"] = binary
+            try:
+                console.print(f"OpenClaw CLI: {' '.join(openclaw.resolve(binary))}", markup=False, highlight=False)
+            except openclaw.OpenClawError as err:
+                console.print(f"Warning: {err}", style="yellow", markup=False)
+        if "email" in chosen:
+            _setup_gmail()
+        status = save_notify_settings(values)
+    except ValueError as err:
+        _fail(str(err))
+    except (typer.Exit, typer.Abort):
+        raise
+    except Exception as err:  # noqa: BLE001 - e.g. no OS credential store on a headless machine
+        _fail(f"{type(err).__name__}: {err}")
+    console.print(f"[green]Saved[/] ({status}): channels = {', '.join(chosen) or 'none'}. Run `fbm notify test`.")
 
 
 @notify_app.command("test")
-def notify_test() -> None:
-    """Send a test email."""
-    from fbm.notify.email import NotifyError, send_email
+def notify_test(
+    channel: str = typer.Option(None, "--channel", help="telegram | openclaw | email (default: every enabled one)."),
+) -> None:
+    """Send a test message (urgent kind: quiet hours don't hold it)."""
+    from fbm.notify import dispatch
+    from fbm.notify.base import NotifyError
 
+    body = "## It works\n\nThis is a test from **FBM**.\n\n| Check | Status |\n|---|---|\n| Delivery | ok |"
     try:
-        result = send_email(
-            "Test — FBM notifications are working",
-            "## It works\n\nThis is a test from **FBM**.\n\n| Check | Status |\n|---|---|\n| Gmail SMTP | ✅ |",
-            kind="alert",
-        )
+        result = dispatch.send("Test: FBM notifications are working", body, kind="alert", only=channel)
     except NotifyError as err:
         _fail(str(err))
-    console.print(f"[green]{result['status']}[/] → {result.get('to', '')}")
+    if result["status"] == "disabled":
+        _fail(result["detail"])
+    for d in result.get("deliveries", []):
+        color = "green" if d["status"] == "sent" else "red"
+        console.print(f"[{color}]{d['status']}[/] {d['channel']}: {d['detail']}", highlight=False)
+
+
+@notify_app.command("flush")
+def notify_flush() -> None:
+    """Deliver messages held during quiet hours (only once quiet hours are over; at most 12 hours old)."""
+    from fbm.notify import dispatch
+
+    released = dispatch.flush_held()
+    console.print(f"{len(released)} held message(s) released.")
 
 
 # ---------------------------------------------------------------- Proposals (owner-side)
@@ -1050,14 +1164,14 @@ def notify_outbox(limit: int = typer.Option(15, help="Rows to show.")) -> None:
     """Recent notifications and their delivery status."""
     rows = (
         store.connect()
-        .execute("SELECT created_at, status, subject, detail FROM outbox ORDER BY id DESC LIMIT ?", (limit,))
+        .execute("SELECT created_at, channel, status, subject, detail FROM outbox ORDER BY id DESC LIMIT ?", (limit,))
         .fetchall()
     )
     table = Table(title="Outbox")
-    for col in ("When (UTC)", "Status", "Subject", "Detail"):
+    for col in ("When (UTC)", "Channel", "Status", "Subject", "Detail"):
         table.add_column(col)
     for r in rows:
-        table.add_row(r["created_at"][:16], r["status"], r["subject"], (r["detail"] or "")[:60])
+        table.add_row(r["created_at"][:16], r["channel"], r["status"], r["subject"], (r["detail"] or "")[:60])
     console.print(table)
 
 
@@ -1302,6 +1416,7 @@ def dashboard(port: int = typer.Option(8501, help="Local port."), open_browser: 
 from fbm import (  # noqa: E402,F401  (each module registers its commands on `app`)
     cli_agent,  # `fbm agent`
     cli_automation,  # `fbm automation`
+    cli_digest,  # `fbm digest`, `fbm alert` (deterministic briefs and alerts, no AI)
     cli_flaim,  # `fbm flaim` (the Yahoo league through Flaim)
     cli_hashtag,  # `fbm hashtag` (Hashtag Basketball Premium)
     cli_migrate,  # `fbm migrate` (one-off local data migrations)
@@ -1311,4 +1426,8 @@ from fbm import (  # noqa: E402,F401  (each module registers its commands on `ap
 )
 
 if __name__ == "__main__":
-    app()
+    # `python -m fbm.cli` (every scheduler entry) runs this file as __main__, but the command modules above register
+    # on the importable `fbm.cli` app: run that one, or `automation`, `alert`, `snapshot`... would be missing.
+    from fbm.cli import app as registered_app
+
+    registered_app()

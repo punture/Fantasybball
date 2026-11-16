@@ -34,9 +34,7 @@ SCHEDULE = {
 
 def _league(week=3, start=date(2026, 11, 2), end=date(2026, 11, 8), opp=SHOHAKU, source="yahoo") -> LeagueState:
     me = FantasyTeam(ME, "Glass Cleaners", "Quin", [RosterPlayer("a", "A Guard", "BOS", ("PG", "UTIL"), "PG")])
-    sho = FantasyTeam(
-        SHOHAKU, "Team Shohoku", "Ryo", [RosterPlayer("b", "B Wing", "LAL", ("SF", "UTIL"), "UTIL")]
-    )
+    sho = FantasyTeam(SHOHAKU, "Team Shohoku", "Ryo", [RosterPlayer("b", "B Wing", "LAL", ("SF", "UTIL"), "UTIL")])
     dime = FantasyTeam(DIMEBAG, "dimebag", "Sam", [RosterPlayer("c", "C Big", "MIA", ("C", "UTIL"), "UTIL")])
     slots = (SlotSpec("PG", 1, True), SlotSpec("UTIL", 2, True), SlotSpec("BN", 2, False), SlotSpec("IL", 1, False))
     return LeagueState(

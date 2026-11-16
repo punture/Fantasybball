@@ -18,6 +18,7 @@ HASHTAG_WEB_SESSION = "hashtag_web_session"  # Hashtag Basketball Premium sign-i
 GMAIL_ADDRESS = "gmail_address"
 GMAIL_APP_PASSWORD = "gmail_app_password"
 FLAIM_OAUTH = "flaim_oauth"  # Flaim sign-in: OAuth client + tokens as one JSON blob (put_large/get_large)
+TELEGRAM_BOT_TOKEN = "telegram_bot_token"  # @BotFather token for direct Telegram alerts (`fbm notify setup`)
 
 # Windows Credential Manager caps one secret at 1280 characters; larger values are split across numbered entries.
 CHUNK_CHARS = 1000

@@ -131,6 +131,10 @@ FBM has no draft commands (retired): use Hashtag Basketball's Draft Tracker. `fb
 | Command | Purpose |
 |---|---|
 | `fbm demo build [--seed] [--my-pick]` | Simulate a 12-team snake draft from current projections and save it as the demo league |
-| `fbm notify setup` | Store your Gmail address and App Password in the OS credential store |
-| `fbm notify test` | Send a test email |
-| `fbm notify outbox [--limit N]` | Recent notifications and their delivery status |
+| `fbm notify setup [--channels] [--chat-id] [--openclaw-bin] [--detect-chat-id]` | Choose channels (Telegram bot, OpenClaw, Gmail); bot token / App Password go to the OS credential store, `[notify]` keys to settings ([telegram.md](telegram.md)) |
+| `fbm notify test [--channel telegram\|openclaw\|email]` | Send a test message to every enabled channel (or one) |
+| `fbm notify flush` | Deliver messages held during quiet hours (once they are over) |
+| `fbm notify outbox [--limit N]` | Recent notifications: channel, delivery status, detail |
+| `fbm digest [--kind daily\|weekly] [--send]` | Deterministic Telegram-ready brief (no AI): verdict first, at most 3500 characters |
+| `fbm alert lineup [--send]` | Lineup alert ~90 min before the first affected tip-off, with exact Yahoo steps; prints `NO_REPLY` otherwise |
+| `fbm alert injuries [--send]` | New status changes on your and your opponent's rosters plus "next man up" pickups; `NO_REPLY` otherwise |

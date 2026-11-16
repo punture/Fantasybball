@@ -5,6 +5,8 @@ Design:
   the *current* date. OS schedulers (Task Scheduler, launchd, cron) run in machine-local time, so after a DST change
   in either zone re-run `fbm automation install` (the installer prints the next transition date).
 - Every scheduler entry calls one entry point: `<python> -m fbm.cli automation run JOB` with the repo as working dir.
+- Engine-only mode (free, no AI) can run on a denser schedule than the AI modes: lineup-guard checks every 15 minutes
+  and only messages the owner when a lineup alert or injury update is due (`fbm alert ...`, NO_REPLY otherwise).
 - Headless AI runs may run only `uv run fbm tool ...` shell commands plus read-only file access wherever the agent
   supports it. They may create proposals; approvals always come from the owner. Nothing auto-approves file writes.
 
@@ -38,6 +40,7 @@ CRON_BEGIN = "# >>> FBM automation (managed by `fbm automation`; do not edit) >>
 CRON_END = "# <<< FBM automation <<<"
 LOCK_STALE_SECONDS = 3 * 3600
 JOB_TIMEOUT_SECONDS = 2 * 3600
+LOG_KEEP_DAYS = 30  # run logs older than this are deleted (engine-only lineup-guard alone writes 56 a day)
 
 HEADLESS_AGENTS = ("copilot", "claude-code", "codex", "cursor", "gemini")
 
@@ -64,9 +67,16 @@ class Job:
     skill: str | None  # skill run by AI modes
     role: str  # "routine" or "gm" (model role)
     engine_commands: tuple[tuple[str, ...], ...]  # deterministic `fbm` commands for engine-only mode
+    engine_et_triggers: tuple[Trigger, ...] = ()  # engine-only schedule when it differs from et_triggers
+
+    def triggers(self, mode: str | None = None) -> tuple[Trigger, ...]:
+        """ET triggers for a mode: engine-only uses engine_et_triggers when set (AI runs keep et_triggers)."""
+        return self.engine_et_triggers if mode == "engine-only" and self.engine_et_triggers else self.et_triggers
 
 
 _GAME_WINDOW = tuple(Trigger(h, 0) for h in range(11, 23))  # 11:00-22:00 ET covers early weekend tips + nightly slate
+# Engine-only alerts: every 15 minutes 10:00-23:45 ET (a lineup alert fires ~90 minutes before the first affected tip).
+_ALERT_WINDOW = tuple(Trigger(h, m) for h in range(10, 24) for m in (0, 15, 30, 45))
 
 CATALOG: dict[str, Job] = {
     j.name: j
@@ -81,19 +91,21 @@ CATALOG: dict[str, Job] = {
         ),
         Job(
             "lineup-guard",
-            "Hourly lineup/IL check across the ET game window (incl. early weekend games).",
+            "Lineup/IL check across the ET game window (incl. early weekend games): hourly with an AI agent; "
+            "engine-only every 15 minutes, messaging you only when a lineup alert or injury update is due.",
             _GAME_WINDOW,
             "lineup-guard",
             "routine",
-            (("lineup",),),
+            (("alert", "lineup", "--send"), ("alert", "injuries", "--send")),
+            _ALERT_WINDOW,
         ),
         Job(
             "daily-gm",
-            "Daily GM run after games are final and data is synced.",
+            "Daily GM run after games are final and data is synced (engine-only: the daily digest).",
             (Trigger(4, 0),),
             "daily-gm",
             "gm",
-            (("snapshot",), ("lineup",)),
+            (("snapshot",), ("digest", "--send")),
         ),
         Job(
             "weekly-retro",
@@ -101,7 +113,7 @@ CATALOG: dict[str, Job] = {
             (Trigger(5, 0, (1,)),),
             "weekly-retro-preview",
             "gm",
-            (("learn", "retro"),),
+            (("learn", "retro"), ("digest", "--kind", "weekly", "--send")),
         ),
         Job(
             "trade-scan",
@@ -120,6 +132,43 @@ assert tuple(CATALOG) == JOBS
 # ---------------------------------------------------------------- schedules
 
 
+def trigger_runs(triggers: Sequence[Trigger], min_run: int = 3) -> list[tuple[Trigger, int, int]]:
+    """(first, gap minutes, count) for each run of at least `min_run` evenly spaced triggers (same days, constant
+    gap, in order, across midnight too); any other trigger is a run of one (gap 0)."""
+
+    def gap(a: Trigger, b: Trigger) -> int:
+        return (b.hour * 60 + b.minute - a.hour * 60 - a.minute) % 1440
+
+    runs: list[tuple[Trigger, int, int]] = []
+    i = 0
+    while i < len(triggers):
+        step = gap(triggers[i], triggers[i + 1]) if i + 1 < len(triggers) else 0
+        j = i + 1
+        while (
+            j < len(triggers)
+            and step
+            and triggers[j].days == triggers[i].days
+            and gap(triggers[j - 1], triggers[j]) == step
+        ):
+            j += 1
+        count = j - i if j - i >= min_run else 1
+        runs.append((triggers[i], step if count > 1 else 0, count))
+        i += count
+    return runs
+
+
+def describe_triggers(triggers: Sequence[Trigger]) -> str:
+    """'daily 10:00-23:45 every 15 min; Mon 05:00' (evenly spaced runs collapsed)."""
+    parts = []
+    for t, step, count in trigger_runs(triggers):
+        if count == 1:
+            parts.append(t.describe())
+        else:
+            end = (t.hour * 60 + t.minute + step * (count - 1)) % 1440
+            parts.append(f"{t.describe()}-{end // 60:02d}:{end % 60:02d} every {step} min")
+    return "; ".join(parts)
+
+
 def convert_trigger(t: Trigger, owner_tz: str, on: date | None = None) -> Trigger:
     """Convert an ET trigger to owner-local wall time using the UTC offsets in effect on `on` (default: today ET)."""
     ref = on or datetime.now(ET).date()
@@ -130,9 +179,9 @@ def convert_trigger(t: Trigger, owner_tz: str, on: date | None = None) -> Trigge
     return Trigger(local.hour, local.minute, days)
 
 
-def owner_triggers(job: str, owner_tz: str, on: date | None = None) -> tuple[Trigger, ...]:
+def owner_triggers(job: str, owner_tz: str, on: date | None = None, mode: str | None = None) -> tuple[Trigger, ...]:
     seen: list[Trigger] = []
-    for t in CATALOG[job].et_triggers:
+    for t in CATALOG[job].triggers(mode):
         c = convert_trigger(t, owner_tz, on)
         if c not in seen:
             seen.append(c)
@@ -295,6 +344,20 @@ def _redact(cmd: list[str], prompt_len: int = 60) -> str:
     return " ".join((a if len(a) <= prompt_len else a[:prompt_len] + "...") for a in cmd)
 
 
+def prune_logs(job: str, log_dir: Path = LOG_DIR, keep_days: int = LOG_KEEP_DAYS) -> int:
+    """Delete this job's per-run logs (`<job>-<UTC stamp>.log`) older than `keep_days`. Returns how many."""
+    cutoff = time.time() - keep_days * 86400
+    removed = 0
+    for old in log_dir.glob(f"{job}-????????T??????Z.log"):
+        try:
+            if old.stat().st_mtime < cutoff:
+                old.unlink()
+                removed += 1
+        except OSError:
+            continue  # in use or already gone: try again next run
+    return removed
+
+
 def run_job(
     job: str,
     s: Settings,
@@ -323,6 +386,7 @@ def run_job(
         return 3, log
     code = 0
     try:
+        prune_logs(job, log_dir)
         cmds = plan_run(job, s, mode)
         with log.open("w", encoding="utf-8") as f:
             f.write(f"job={job} mode={mode} agent={s.agent} start={now.isoformat()}\n")
@@ -350,17 +414,25 @@ def entry_name(job: str) -> str:
 
 
 def task_xml(job: str, triggers: Sequence[Trigger], command: Sequence[str], workdir: Path, start: date) -> str:
-    """Windows Task Scheduler XML (one CalendarTrigger per trigger; local wall time)."""
+    """Windows Task Scheduler XML: one CalendarTrigger per trigger, or per evenly spaced run of triggers with a
+    Repetition (a task holds at most 48 triggers); local wall time."""
     day_tags = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     trig = []
-    for t in triggers:
+    for t, step, count in trigger_runs(triggers):
         boundary = f"{start.isoformat()}T{t.hour:02d}:{t.minute:02d}:00"
         if t.days:
             days = "".join(f"<{day_tags[d - 1]} />" for d in t.days)
             sched = f"<ScheduleByWeek><DaysOfWeek>{days}</DaysOfWeek><WeeksInterval>1</WeeksInterval></ScheduleByWeek>"
         else:
             sched = "<ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>"
-        trig.append(f"    <CalendarTrigger><StartBoundary>{boundary}</StartBoundary>{sched}</CalendarTrigger>")
+        repeat = ""
+        if count > 1:  # `count` runs, `step` minutes apart; the duration ends just after the last one
+            span = step * (count - 1) + 1
+            repeat = (
+                f"<Repetition><Interval>PT{step}M</Interval><Duration>PT{span // 60}H{span % 60}M</Duration>"
+                "<StopAtDurationEnd>false</StopAtDurationEnd></Repetition>"
+            )
+        trig.append(f"    <CalendarTrigger>{repeat}<StartBoundary>{boundary}</StartBoundary>{sched}</CalendarTrigger>")
     args = subprocess.list2cmdline(list(command[1:]))
     return "\n".join(
         [
@@ -415,10 +487,16 @@ def cron_lines(job: str, triggers: Sequence[Trigger], command: Sequence[str], wo
     import shlex
 
     cmd = f"cd {shlex.quote(str(workdir))} && {shlex.join(command)} >/dev/null 2>&1"
-    lines = []
+    hours: dict[tuple[tuple[int, ...], int], list[int]] = {}  # (days, hour) -> minutes, in trigger order
     for t in triggers:
-        dow = ",".join(str(d % 7) for d in t.days) if t.days else "*"  # cron: 0=Sunday
-        lines.append(f"{t.minute} {t.hour} * * {dow} {cmd}  # {entry_name(job)}")
+        hours.setdefault((t.days, t.hour), []).append(t.minute)
+    groups: dict[tuple[tuple[int, ...], str], list[int]] = {}  # (days, minutes) -> the hours sharing them
+    for (days, hour), minutes in hours.items():
+        groups.setdefault((days, ",".join(map(str, sorted(set(minutes))))), []).append(hour)
+    lines = []
+    for (days, minutes), hrs in groups.items():
+        dow = ",".join(str(d % 7) for d in days) if days else "*"  # cron: 0=Sunday
+        lines.append(f"{minutes} {','.join(map(str, hrs))} * * {dow} {cmd}  # {entry_name(job)}")
     return lines
 
 
@@ -472,7 +550,7 @@ def plan_entries(s: Settings, jobs: Sequence[str], mode: str, on: date | None = 
         if mode == "engine-only" and not CATALOG[job].engine_commands:
             continue  # AI-only job (trade-scan)
         entries.append(
-            Entry(job, owner_triggers(job, s.owner_timezone, on), tuple(fbm_command("automation", "run", job)))
+            Entry(job, owner_triggers(job, s.owner_timezone, on, mode), tuple(fbm_command("automation", "run", job)))
         )
     return entries
 
@@ -497,8 +575,8 @@ def agent_app_instructions(s: Settings, jobs: Sequence[str], on: date | None = N
                 f"- {job}: deterministic, no AI needed; use `fbm automation install --mode engine-only --jobs {job}`."
             )
             continue
-        local = "; ".join(t.describe() for t in owner_triggers(job, s.owner_timezone, on))
-        et = "; ".join(t.describe() for t in j.et_triggers)
+        local = describe_triggers(owner_triggers(job, s.owner_timezone, on))
+        et = describe_triggers(j.et_triggers)
         model = model_for(job, s) or "(agent default)"
         out += [f"- {job}  [{model}]  {local}  [ET: {et}]", f"  Prompt: {job_prompt(job)}", ""]
     return "\n".join(out)

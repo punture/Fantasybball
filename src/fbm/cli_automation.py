@@ -23,11 +23,13 @@ def jobs_cmd() -> None:
     """Show the job catalog (ET schedule, skill, model role, engine-only commands)."""
     s = load_settings()
     for j in auto.CATALOG.values():
-        et = "; ".join(t.describe() for t in j.et_triggers)
-        local = "; ".join(t.describe() for t in auto.owner_triggers(j.name, s.owner_timezone))
+        et = auto.describe_triggers(j.et_triggers)
+        local = auto.describe_triggers(auto.owner_triggers(j.name, s.owner_timezone))
         engine = " && ".join("fbm " + " ".join(c) for c in j.engine_commands) or "(AI only)"
         console.print(f"[bold]{j.name}[/] — {j.description}")
         console.print(f"  ET: {et}\n  {s.owner_timezone}: {local}")
+        if j.engine_et_triggers:
+            console.print(f"  engine-only ET: {auto.describe_triggers(j.engine_et_triggers)}")
         console.print(f"  skill: {j.skill or '-'}  role: {j.role}  engine-only: {engine}")
 
 
