@@ -2,7 +2,9 @@
 
 Pure functions decide and render from engine outputs; the thin collectors at the bottom read FBM's services. Alerts
 fire only when something is actionable and new (dedupe state in the notify_state table, keyed per ET game day for
-lineups). FBM never changes the league: lineup alerts carry the exact manual steps for Yahoo.
+lineups). FBM never changes the league: lineup alerts carry the exact manual steps for Yahoo. An alert built on an old
+Yahoo snapshot (Yahoo couldn't be re-read) says so under its title; a lineup alert gives no advice from one past
+STALE_LIMIT_MIN.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import Any
 
+from fbm.constants import C
 from fbm.league.model import IL_SLOTS, INACTIVE_SLOTS, LeagueState, RosterPlayer, can_fill
 from fbm.notify import state as notify_state
 from fbm.notify.text import clip, clock, day_label, fit, until
@@ -25,6 +28,8 @@ INJURY_KEY = "alert.injuries"
 LINEUP_WINDOW = timedelta(minutes=90)  # alert when the first affected tip-off is this close
 INJURY_REFRESH_MIN = 10  # re-read ESPN injuries when older than this
 SNAPSHOT_MAX_AGE_MIN = 10  # re-read Yahoo before alerting from an older snapshot
+STALE_LIMIT_MIN = 6 * 60  # past this (Yahoo unreadable), the lineup alert gives no advice, only the stale warning
+STALE_KEY = "stale-snapshot"  # dedupe key of that warning (once per ET game day)
 SEEN_SIGNALS_KEPT = 300
 ALERT_LIMIT = 3500
 
@@ -137,9 +142,18 @@ def find_lineup_issues(
     )
 
 
-def render_lineup_alert(f: LineupFindings, day: date, now: datetime, tz: tzinfo, blocked: Sequence[str] = ()) -> str:
+def render_lineup_alert(
+    f: LineupFindings,
+    day: date,
+    now: datetime,
+    tz: tzinfo,
+    blocked: Sequence[str] = (),
+    stale: Mapping[str, Any] | None = None,
+) -> str:
+    """`stale` (stale_snapshot): the advice comes from an old Yahoo snapshot, said right under the title."""
     lines = [
         f"**Lineup alert · {day_label(day)}**",
+        *([render_stale(stale, tz)] if stale else []),
         f"First tip-off {clock(f.first_tip, tz)} ({until(f.first_tip, now)}) · starters with a game: "
         f"{f.starts_before} → {f.starts_after}",
     ]
@@ -160,6 +174,31 @@ def render_lineup_alert(f: LineupFindings, day: date, now: datetime, tz: tzinfo,
             "Save. Optional: `fbm lineup --done` once it's set.",
         ]
     return fit(lines, [], ALERT_LIMIT, "")
+
+
+def render_stale(stale: Mapping[str, Any], tz: tzinfo) -> str:
+    """One line for a message built on an old Yahoo snapshot (stale_snapshot): when the data is from, why it
+    wasn't re-read, and the fix."""
+    when = "an unknown time"
+    if stale.get("fetched_at"):
+        fetched = _aware(datetime.fromisoformat(str(stale["fetched_at"])))
+        when = f"{day_label(fetched.astimezone(tz).date())}, {clock(fetched, tz)}"
+    why = f"refresh failed: {clip(stale['refresh_error'], 120)}" if stale.get("refresh_error") else "not refreshed"
+    return f"**Yahoo data is from {when}** ({why}): check Yahoo before acting; fix: {stale['fix']}."
+
+
+def render_stale_lineup_alert(
+    day: date, first_tip: datetime, now: datetime, tz: tzinfo, stale: Mapping[str, Any]
+) -> str:
+    """The lineup alert when the snapshot is too old to advise from (the roster may have changed since)."""
+    return "\n".join(
+        [
+            f"**Lineup alert · {day_label(day)}**",
+            render_stale(stale, tz),
+            f"First tip-off {clock(first_tip, tz)} ({until(first_tip, now)}): FBM can't see your current lineup, "
+            "so it has no advice. Check your lineup in Yahoo before tip-off.",
+        ]
+    )
 
 
 # ---------------------------------------------------------------- injuries (pure)
@@ -241,8 +280,14 @@ _SIGNAL_LABEL = {"opportunity": "next man up", "role_change": "role change"}
 
 
 def render_injury_alert(
-    when: str, changes: Sequence[StatusChange], opponent: str | None, pickups: Sequence[Mapping[str, Any]]
+    when: str,
+    changes: Sequence[StatusChange],
+    opponent: str | None,
+    pickups: Sequence[Mapping[str, Any]],
+    stale: str | None = None,
 ) -> str | None:
+    """`stale`: the render_stale line when the rosters come from an old Yahoo snapshot (never an alert on its own)."""
+
     def line(c: StatusChange) -> str:
         note = f"\n  ESPN: {clip(c.comment, 100)}" if c.comment else ""  # ESPN's note: data, quoted as-is
         return f"- **{c.name}** ({c.team}) {c.old or '?'} → **{c.new}**: {what_to_do(c)}.{note}"
@@ -261,7 +306,8 @@ def render_injury_alert(
         [f"**Opponent · {clip(opponent, 40) or 'this week'}**", *theirs] if theirs else [],  # team name: untrusted
         ["**Next man up (free agents)**", *picks] if picks else [],
     ]
-    return fit([f"**Injury update · {when}**"], sections, ALERT_LIMIT, "*{n} more section(s) cut.*")
+    head = [f"**Injury update · {when}**", *([stale] if stale else [])]
+    return fit(head, sections, ALERT_LIMIT, "*{n} more section(s) cut.*")
 
 
 # ---------------------------------------------------------------- collectors (read FBM's services)
@@ -296,18 +342,47 @@ def _games(conn: sqlite3.Connection, day: date) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+def _aware(moment: datetime) -> datetime:
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
 def _snapshot_age_min(league: LeagueState, now: datetime) -> float | None:
     if not league.fetched_at:
         return None
-    fetched = datetime.fromisoformat(league.fetched_at)
-    return (now - (fetched if fetched.tzinfo else fetched.replace(tzinfo=UTC))).total_seconds() / 60
+    return (now - _aware(datetime.fromisoformat(league.fetched_at))).total_seconds() / 60
+
+
+def stale_snapshot(league: LeagueState, now: datetime, max_age_min: float) -> dict[str, Any] | None:
+    """{fetched_at, age_min, refresh_error, fix} when a Yahoo league is served from a snapshot older than
+    `max_age_min`, i.e. Yahoo couldn't be re-read (yahoo_league.last_refresh_error says why); None when it is fresh or
+    not a Yahoo league. No "error" key: the digest's attempt() would read the dict as a failed tool."""
+    if league.source != "yahoo":
+        return None
+    age = _snapshot_age_min(league, now)
+    if age is not None and age <= max_age_min:
+        return None
+    from fbm.flaim.route import is_flaim
+    from fbm.league.yahoo_league import last_refresh_error
+
+    return {
+        "fetched_at": league.fetched_at or None,
+        "age_min": None if age is None else round(age),
+        "refresh_error": last_refresh_error(),
+        "fix": "`fbm flaim login`, then `fbm flaim check`" if is_flaim() else "`fbm yahoo check`",
+    }
+
+
+def _my_first_tip(conn: sqlite3.Connection, league: LeagueState, now: datetime) -> datetime | None:
+    """The first tip-off still ahead today among my players' NBA teams."""
+    _, upcoming = tipoffs(_games(conn, nba_today(now)), now)
+    tips = [upcoming[p.nba_team] for p in league.my_team.players if p.nba_team in upcoming]
+    return min(tips) if tips else None
 
 
 def _my_tip_is_near(conn: sqlite3.Connection, league: LeagueState, now: datetime) -> bool:
     """Does any of my players tip off within LINEUP_WINDOW (and not yet)?"""
-    _, upcoming = tipoffs(_games(conn, nba_today(now)), now)
-    tips = [upcoming[p.nba_team] for p in league.my_team.players if p.nba_team in upcoming]
-    return bool(tips) and min(tips) - now <= LINEUP_WINDOW
+    tip = _my_first_tip(conn, league, now)
+    return tip is not None and tip - now <= LINEUP_WINDOW
 
 
 def _lineup_findings(svc: Any, conn: sqlite3.Connection, league: LeagueState, now: datetime):
@@ -334,21 +409,30 @@ def lineup_alert(conn: sqlite3.Connection, now: datetime, tz: tzinfo) -> tuple[s
     if not _my_tip_is_near(conn, league, now):
         return None, None  # nothing of mine tips off soon: no Yahoo read, no optimizer
     age = _snapshot_age_min(league, now)
-    if league.source == "yahoo" and age is not None and age > SNAPSHOT_MAX_AGE_MIN:
+    if league.source == "yahoo" and (age is None or age > SNAPSHOT_MAX_AGE_MIN):
         # Yahoo statuses (O / GTD) and the lineup the owner has set are only as fresh as the snapshot (served up to
         # an hour): before a tip-off, re-read it so a starter ruled out since then is seen in time.
         from fbm.league.yahoo_league import load_or_refresh
 
         league = svc._roll_week(load_or_refresh(SNAPSHOT_MAX_AGE_MIN))
+    # Still old: Yahoo couldn't be re-read (load_or_refresh fell back to the saved snapshot). Say so, and past
+    # STALE_LIMIT_MIN give no advice at all: the owner may have changed the roster since.
+    stale = stale_snapshot(league, now, SNAPSHOT_MAX_AGE_MIN)
+    day = nba_today(now)
+    saved = notify_state.get(conn, LINEUP_KEY) or {}
+    if stale and (stale["age_min"] is None or stale["age_min"] > STALE_LIMIT_MIN):
+        first_tip = _my_first_tip(conn, league, now)
+        if first_tip is None or (saved.get("et_date") == day.isoformat() and saved.get("key") == STALE_KEY):
+            return None, None
+        return render_stale_lineup_alert(day, first_tip, now, tz, stale), {"et_date": day.isoformat(), "key": STALE_KEY}
     found = _lineup_findings(svc, conn, league, now)
     if not found:
         return None, None
     findings, blocked_moves = found
-    day = nba_today(now)
-    saved = notify_state.get(conn, LINEUP_KEY) or {}
     if saved.get("et_date") == day.isoformat() and saved.get("key") == findings.key:
         return None, None
-    return render_lineup_alert(findings, day, now, tz, blocked_moves), {"et_date": day.isoformat(), "key": findings.key}
+    text = render_lineup_alert(findings, day, now, tz, blocked_moves, stale)
+    return text, {"et_date": day.isoformat(), "key": findings.key}
 
 
 def injury_alert(conn: sqlite3.Connection, now: datetime, tz: tzinfo) -> tuple[str | None, dict[str, Any]]:
@@ -363,6 +447,7 @@ def injury_alert(conn: sqlite3.Connection, now: datetime, tz: tzinfo) -> tuple[s
     since = int(saved.get("last_event_id", 0))
     events = conn.execute("SELECT * FROM injury_events WHERE id > ? ORDER BY id", (since,)).fetchall()
     league = svc.active_league()
+    stale = stale_snapshot(league, now, float(C("yahoo.snapshot_max_age_min")))  # rosters and slots may be outdated
     try:
         opp = svc._default_opponent(league)
     except Exception:  # noqa: BLE001 - opponent unknown (week rollover): my roster only
@@ -386,7 +471,8 @@ def injury_alert(conn: sqlite3.Connection, now: datetime, tz: tzinfo) -> tuple[s
         "last_event_id": max([since, *(int(e["id"]) for e in events)]),
         "signals": sorted(seen | {int(s["signal_id"]) for s in feed})[-SEEN_SIGNALS_KEPT:],
     }
-    return render_injury_alert(clock(now, tz), changes, opp.name if opp else None, pickups), new_state
+    warning = render_stale(stale, tz) if stale else None
+    return render_injury_alert(clock(now, tz), changes, opp.name if opp else None, pickups, warning), new_state
 
 
 def _pickup_feed(svc: Any) -> list[dict[str, Any]]:

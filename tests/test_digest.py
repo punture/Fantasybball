@@ -141,6 +141,47 @@ def test_unavailable_sections_get_a_short_note():
     assert "**Lineup today**" in text and "Top waiver target" not in text
 
 
+def test_verdict_never_says_no_moves_when_it_could_not_check():
+    # Fresh setup on the Flaim route with no snapshot yet: the league can't be read, so every section fails.
+    unreadable = Unavailable(
+        "Yahoo league unavailable and no snapshot yet: Flaim: FBM isn't signed in to Flaim: run 'fbm flaim login'"
+    )
+    down = Unavailable("GMError: Yahoo league unavailable and no snapshot yet: Flaim: FBM isn't signed in to Fl…")
+    keys = ("overview", "odds", "lineup", "first_tip", "injuries", "stream", "radar", "waiver", "signals", "proposals")
+    d = _data(**dict.fromkeys(keys, down), snapshot=unreadable, offers=down, health=down)
+    lines = digest.render(d, SETTINGS).splitlines()
+    assert lines[1] == (
+        f"**Verdict:** FBM couldn't read your league ({unreadable.reason}). Matchup odds unavailable. Lineup and "
+        "streaming unavailable: see below."
+    )
+    weekly = _data(kind="weekly", stream=Unavailable("RuntimeError: boom"), proposals={"proposals": []})
+    del weekly["lineup"]
+    verdict = digest.render(weekly, SETTINGS).splitlines()[2]
+    assert "No moves needed" not in verdict and verdict.endswith("expected). Streaming unavailable: see below.")
+    still = digest.render(_data(lineup=Unavailable("GMError: x")), SETTINGS).splitlines()[2]  # what is known stays
+    assert still.endswith(
+        "Today: stream Toumani Camara (+0.28 cats), 1 proposal(s) need you. Lineup unavailable: see below."
+    )
+
+
+def test_old_yahoo_data_leads_the_verdict():
+    """A failed Yahoo refresh: the verdict says how old its data is before any advice (not only under Health, which
+    is cut first)."""
+    snap = {
+        "fetched_at": "2026-11-14T15:00:00+00:00",
+        "age_min": 2820,
+        "refresh_error": "FlaimLoginRequired: the Flaim sign-in expired or was revoked: run `fbm flaim login`",
+        "fix": "`fbm flaim login`, then `fbm flaim check`",
+    }
+    verdict = digest.render(_data(snapshot=snap), SETTINGS).splitlines()[2]
+    assert verdict.startswith(
+        "**Verdict:** **Yahoo data is from Sat Nov 14, 9:00 AM CST** (refresh failed: FlaimLoginRequired: the Flaim "
+        "sign-in expired or was revoked: run 'fbm flaim login'): check Yahoo before acting; fix: `fbm flaim login`, "
+        "then `fbm flaim check`. Favored vs Euro Steppers"
+    )
+    assert digest.render(_data(snapshot=None), SETTINGS).splitlines()[2].startswith("**Verdict:** Favored")
+
+
 def test_quiet_day_and_demo_header():
     d = _data(
         lineup={"date_et": "2026-11-16", "changes": [], "il_moves_needing_a_roster_move": ["Z: roster full"]},
@@ -281,6 +322,36 @@ def test_collect_isolates_each_section_and_uses_the_trigger():
     weekly = digest.collect("weekly", record=False, now=NOW, svc=svc)
     assert "lineup" not in weekly and "waiver" not in weekly
     assert calls[-1][0] == "health_check" and ("streaming_plan", (), {"trigger": "owner-ask"}) in calls
+
+
+def test_collect_reports_old_or_unreadable_league_data(monkeypatch):
+    from fbm.flaim import route
+    from fbm.gm.services import GMError
+    from fbm.league import yahoo_league
+
+    monkeypatch.setattr(yahoo_league, "last_refresh_error", lambda: "ReadTimeout: timed out")
+    monkeypatch.setattr(route, "is_flaim", lambda settings=None: True)
+    svc, _calls = _fake_svc()
+    assert digest.collect("daily", now=NOW, svc=svc)["snapshot"] is None  # demo league
+    league = svc.active_league()
+    league.source, league.fetched_at = "yahoo", "2026-11-16T08:00:00+00:00"  # 6 h before NOW, refresh failed
+    assert digest.collect("daily", now=NOW, svc=svc)["snapshot"] == {
+        "fetched_at": "2026-11-16T08:00:00+00:00",
+        "age_min": 360,
+        "refresh_error": "ReadTimeout: timed out",
+        "fix": "`fbm flaim login`, then `fbm flaim check`",
+    }
+    league.fetched_at = NOW.isoformat()
+    assert digest.collect("weekly", now=NOW, svc=svc)["snapshot"] is None
+
+    hint = "Yahoo league unavailable and no snapshot yet: Flaim: FBM isn't signed in to Flaim: run `fbm flaim login`"
+
+    def unreadable():
+        raise GMError(hint)
+
+    svc.active_league = unreadable
+    snap = digest.collect("daily", now=NOW, svc=svc)["snapshot"]
+    assert snap == Unavailable(hint.replace("`", "'"))  # the whole message, so the fix is never cut off
 
 
 def test_unknown_opponent_still_lists_my_injuries():

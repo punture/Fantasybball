@@ -13,6 +13,7 @@ Dates are **US/Eastern** NBA game days (`YYYY-MM-DD`).
 | `fbm constants` | Every tunable engine constant (value, kind, source); override in `config/constants.toml` |
 | `fbm backup [--dest DIR]` | Zip `memory/`, `reports/`, settings, league config and the NBA database to a local folder (default `data/backups/`; no secrets) |
 | `fbm dashboard [--port 8501]` | Launch the local Streamlit dashboard |
+| `fbm migrate overhaul [--league-id ID] [--enable/--no-enable] [--yahoo/--no-yahoo]` | One-off move to the Hashtag data layer + decision calibration: backup, `[hashtag]` settings (`--league-id` defaults to the Yahoo league id), decision log, and (`--yahoo`) cache Yahoo finals and daily lineups to re-grade legacy forecasts |
 
 ## AI agent wiring (`fbm agent`)
 
@@ -35,6 +36,20 @@ Dates are **US/Eastern** NBA game days (`YYYY-MM-DD`).
 | `fbm automation remove [--jobs a,b]` | Remove FBM scheduler entries (never touches other entries) |
 
 Jobs: `data-sync`, `lineup-guard`, `daily-gm`, `weekly-retro`, `trade-scan`, `health`. See [agents.md](agents.md#automation).
+
+## Flaim (`fbm flaim`)
+
+The recommended way to read Yahoo: Flaim's free, read-only service, no Yahoo API approval needed. See [flaim.md](flaim.md).
+
+| Command | Purpose |
+|---|---|
+| `fbm flaim login [--no-browser] [--league-id KEY] [--timeout 300]` | Sign in to Flaim once, pick your Yahoo league, and make Flaim the route (`[yahoo] route = "flaim"`). `--no-browser` prints the sign-in address instead (headless box, SSH); `--league-id` (e.g. `466.l.12345`) skips the league question; `--timeout` = seconds to wait for the browser sign-in |
+| `fbm flaim check [--date D]` | Read every Flaim feed FBM uses and report what works, what's missing and any mapping misses (read-only); `--date` = ET game day for the roster reads (default today) |
+| `fbm flaim status` | Route, Flaim sign-in and league; never prints secrets |
+| `fbm flaim leagues [--select] [--league-id KEY]` | Your Yahoo NBA leagues on Flaim; `--select` chooses the league FBM manages (`--league-id` skips the question) |
+| `fbm flaim route [auto\|flaim\|session\|api]` | Show or set how FBM reads Yahoo (`[yahoo] route` in `config/settings.toml`) |
+| `fbm flaim logout` | Forget FBM's Flaim sign-in (your Flaim account and its Yahoo connection stay as they are) |
+| `fbm flaim dump [--out DIR] [--date D]` | Save every raw Flaim response (plus the check report) as JSON, zipped, to fix mappings against real data (default `data/raw/flaim/<UTC time>/`) |
 
 ## Yahoo connection and league reads
 
@@ -80,6 +95,7 @@ fallback). HT content is personal-use only.
 |---|---|
 | `fbm data sync` | Daily sync: schedule status, new box scores, season averages, injuries, news |
 | `fbm data backfill [--season YYYY] [--workers N]` | One-time load of a completed season (priors and week-to-week variance) |
+| `fbm data projections` | Snapshot ESPN's season projections now (the daily sync does this too; the last snapshot before opening night is the preseason baseline) |
 | `fbm data status` | What's in the local NBA store |
 | `fbm data games [--date D]` | NBA games on an ET date |
 | `fbm data injuries [--team T]` | Current ESPN injury report |
@@ -93,6 +109,9 @@ fallback). HT content is personal-use only.
 | `fbm sim [--start] [--opponent KEY] [--n N] [--demo]` | Monte Carlo the rest of this week: per-category win odds |
 | `fbm profile [--demo] [--n N]` | League-wide category strength per team |
 | `fbm stream [--opponent] [--adds] [--protect]` | Streaming plan: best add/drop sequence within the add limit |
+| `fbm protect [--day D] [--opponent X] [--top 3]` | Late-week protection: should anyone sit to protect a close FG%, FT% or TO? `--day` = ET date the benching can start (default today), `--opponent` = team key or name (default this week's), `--top` = recommended options shown. FBM changes nothing |
+| `fbm signals [--scope all\|mine\|others\|fa] [--kind K,K] [--new] [--top 30] [--refresh] [--min-confidence high\|medium\|low]` | Early-signal feed: who is about to gain or lose value before the market notices. Kinds: `buy_low`, `sell_high`, `role_change`, `opportunity`, `espn_revision` |
+| `fbm buysell [--scope all\|mine\|others\|fa] [--top 15]` | Buy-low / sell-high: season-to-date value vs the rest-of-season projection (Hashtag ROS in Hashtag mode) |
 | `fbm waiver PLAYER [--drop X] [--free-agent]` | Rolling waivers: claim now, wait, add, or pass |
 | `fbm punts [--scenarios "FT%;3PM,FT%"] [--moves N] [--top N]` | Punt-scenario evaluator |
 | `fbm playoffs [--scope] [--top N]` | Fantasy-playoff schedule outlook |
@@ -135,6 +154,6 @@ FBM has no draft commands (retired): use Hashtag Basketball's Draft Tracker. `fb
 | `fbm notify test [--channel telegram\|openclaw\|email]` | Send a test message to every enabled channel (or one) |
 | `fbm notify flush` | Deliver messages held during quiet hours (once they are over) |
 | `fbm notify outbox [--limit N]` | Recent notifications: channel, delivery status, detail |
-| `fbm digest [--kind daily\|weekly] [--send]` | Deterministic Telegram-ready brief (no AI): verdict first, at most 3500 characters |
-| `fbm alert lineup [--send]` | Lineup alert ~90 min before the first affected tip-off, with exact Yahoo steps; prints `NO_REPLY` otherwise |
+| `fbm digest [--kind daily\|weekly] [--send]` | Deterministic Telegram-ready brief (no AI): verdict first, at most 3500 characters. The verdict opens with a warning when Yahoo couldn't be re-read (how old the data is, why, the fix) |
+| `fbm alert lineup [--send]` | Lineup alert ~90 min before the first affected tip-off, with exact Yahoo steps; prints `NO_REPLY` otherwise. When Yahoo couldn't be re-read it says how old the data is; past 6 hours it sends only that warning (once per game day), no advice |
 | `fbm alert injuries [--send]` | New status changes on your and your opponent's rosters plus "next man up" pickups; `NO_REPLY` otherwise |
