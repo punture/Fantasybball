@@ -263,6 +263,57 @@ def test_protect_mode_on_sunday_when_ahead_in_close_ratios():
     assert "don't stream" in (protect.guidance(ctx, plan, names)["volume"] or "")
 
 
+def test_protect_mode_sits_bench_players_with_games_too():
+    # Sitting "everyone" must not bring a bench player with a game into the lineup.
+    me = dict(pts=700, reb=150, ast=170, stl=20, blk=40, tov=60, tpm=30, fgm=250, fga=520, ftm=120, fta=155)
+    opp = dict(pts=420, reb=300, ast=90, stl=45, blk=12, tov=62, tpm=70, fgm=245, fga=520, ftm=118, fta=155)
+    roster = [rp("big", "AAA", "C"), rp("guard", "BBB", "UTIL"), rp("shooter", "CCC", "BN")]
+    models = {"big": BIG, "guard": GUARD, "shooter": SHOOTER, "o1": OPP, "o2": OPP}
+    value = {"big": 2.0, "guard": 3.0, "shooter": -1.0}
+    ctx = build(roster, models, [], me_banked=me, opp_banked=opp, days=[SUN], value=value)
+    plan = protect.advise(ctx, "expected_cats")
+    assert plan.baseline_games == 2 and set(plan.candidate_days) == {"big", "guard"}
+    sit_all = plan.sit_all
+    assert sit_all is not None and sit_all.games == 0 and set(sit_all.players) == {"big", "guard", "shooter"}
+    names = {"big": "Big", "guard": "Guard", "shooter": "Shooter"}
+    assert protect.replacements(ctx, sit_all) == {}
+    assert protect.steps(ctx, sit_all, names) == [
+        "In Yahoo, for Sun 11-22 (ET): move Big from C to BN; move Guard from UTIL to BN."
+    ]
+
+
+def test_a_pair_that_clears_the_bar_is_kept_when_no_single_benching_does():
+    roster = [rp("big", "AAA", "C"), rp("big2", "DDD", "C"), rp("guard", "BBB", "UTIL")]
+    models = {"big": BIG, "big2": BIG, "guard": GUARD, "o1": OPP, "o2": OPP}
+    me = dict(ME_BANKED, ftm=150, fta=200)
+    opp = dict(OPP_BANKED, ftm=144, fta=198)
+    ctx = build(roster, models, opp_games(), me_banked=me, opp_banked=opp, slots=["C", "C", "UTIL"])
+    loose = protect.advise(ctx, "expected_cats", min_gain=0.0)
+    single, pair = loose.best_by_player[0], loose.pair
+    assert pair is not None and 0 < single.gain < pair.gain
+    # a bar above the single benching and above what the second sit adds, but below the pair's total gain
+    bar = (max(single.gain, pair.gain - single.gain) + pair.gain) / 2
+    plan = protect.advise(ctx, "expected_cats", min_gain=bar)
+    assert plan.pair is not None and plan.pair.sits == pair.sits and plan.actions[0] is plan.pair
+    assert all(o.kind != "sit" for o in plan.actions)  # the single benching alone stays below the bar
+
+
+def test_dont_stream_advice_follows_the_objective():
+    # Sunday: five counting categories are locked in my favor, so a one-win league's week is already won; FG%, FT%
+    # and TO are close. Benching everyone gains categories, but not the week.
+    me = dict(pts=700, reb=330, ast=170, stl=45, blk=40, tov=60, tpm=30, fgm=250, fga=520, ftm=120, fta=155)
+    opp = dict(pts=420, reb=180, ast=90, stl=20, blk=12, tov=62, tpm=70, fgm=245, fga=520, ftm=118, fta=155)
+    roster = [rp("big", "AAA", "C"), rp("guard", "BBB", "UTIL")]
+    models = {"big": BIG, "guard": GUARD, "o1": OPP, "o2": OPP}
+    ctx = build(roster, models, [], me_banked=me, opp_banked=opp, days=[SUN])
+    names = {"big": "Big", "guard": "Guard"}
+    head = protect.advise(ctx, "expected_cats")
+    assert "don't stream" in (protect.guidance(ctx, head, names)["volume"] or "")
+    headone = protect.advise(ctx, "p_win_week")
+    assert protect.p_win_week(headone.baseline) == pytest.approx(1.0) and headone.sit_all.gain_cats > 0.5
+    assert "don't stream" not in (protect.guidance(ctx, headone, names)["volume"] or "")
+
+
 def test_windows_and_labels():
     assert protect.windows([THU, SAT, SUN]) == [(THU,), (SAT,), (SUN,), (THU, SAT, SUN), (SAT, SUN)]
     assert protect.windows([SUN]) == [(SUN,)]

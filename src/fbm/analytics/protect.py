@@ -8,7 +8,8 @@ options against this week's opponent with common random numbers (DrawBank): each
 the benching, not Monte Carlo noise.
 
 Options: each player with an unstarted game benched on one remaining ET day or from one day to the end of the week,
-everyone benched for the rest of the week (protect mode), and greedy pairs built on the best single benching.
+everyone with an unstarted game benched for the rest of the week (protect mode: bench players stay benched, so no
+one comes in), and greedy pairs built on the best single benching.
 Games that have tipped off are locked: they still count, but cannot be benched.
 """
 
@@ -80,8 +81,8 @@ class ProtectPlan:
     baseline_games: int
     candidate_days: dict[str, tuple[date, ...]]  # player -> actionable days he starts with an unstarted game
     best_by_player: list[Option]  # each candidate's best single benching, best first
-    sit_all: Option | None
-    pair: Option | None  # best greedy pair (only when its second sit clears the bar)
+    sit_all: Option | None  # protect mode: every player with an unstarted game sits, bench players included
+    pair: Option | None  # best greedy pair (only when it clears the bar, plus the bar again over a single that does)
     actions: list[Option]  # recommended options (gain >= min_gain, none dominated by another), best first
     evaluated: int  # options simulated
 
@@ -141,13 +142,17 @@ def evaluate(ctx: ProtectContext, sits: Mapping[date, frozenset[str]]) -> tuple[
     return compare(ctx.bank.total(games, ctx.banked), ctx.opp_totals, ctx.categories), len(games)
 
 
-def candidate_days(ctx: ProtectContext) -> dict[str, tuple[date, ...]]:
-    """Player -> actionable ET days on which he starts in the normal lineup with a game that has not tipped off."""
+def candidate_days(ctx: ProtectContext, bench: bool = False) -> dict[str, tuple[date, ...]]:
+    """Player -> actionable ET days on which he starts in the normal lineup with a game that has not tipped off.
+
+    bench=True also lists players the normal lineup benches on a day they have such a game (protect mode sits them
+    too, so nobody comes off the bench)."""
     nba = {p.player_id: p.nba_team for p in ctx.players}
     out: dict[str, list[date]] = {}
     for d in ctx.actionable:
         blocked = ctx.locked.get(d, set()) | ctx.skip.get(d, set())
-        for pid in day_lineup(ctx, d)[1]:
+        res, started = day_lineup(ctx, d)
+        for pid in (*started, *res.benched_with_games) if bench else started:
             if nba[pid] not in blocked:
                 out.setdefault(pid, []).append(d)
     return {pid: tuple(days) for pid, days in out.items()}
@@ -208,14 +213,18 @@ def advise(
     cands = candidate_days(ctx)
     singles = {pid: [option("sit", ((pid, w),)) for w in windows(days)] for pid, days in cands.items()}
     best_by_player = sorted((max(opts, key=_rank) for opts in singles.values()), key=_rank, reverse=True)
-    sit_all = option("sit_all", tuple(cands.items())) if len(cands) > 1 else None
+    # protect mode sits every player with an unstarted game, bench players included (no one comes in instead)
+    everyone = candidate_days(ctx, bench=True)
+    sit_all = option("sit_all", tuple(everyone.items())) if cands and len(everyone) > 1 else None
     pair = None
     if best_by_player and best_by_player[0].gain > 0:
         first = best_by_player[0]
         others = [o.players[0] for o in best_by_player[1 : 1 + k]]
         tries = [option("pair", first.sits + s.sits) for pid in others for s in singles[pid]]
         best = max(tries, key=_rank, default=None)
-        if best is not None and best.gain - first.gain >= min_gain:
+        # the pair must clear the bar on its own, and add the bar again on top of a single benching that clears it
+        bar = first.gain + min_gain if first.gain >= min_gain else min_gain
+        if best is not None and best.gain >= bar:
             pair = best
     unique: dict[frozenset, Option] = {}  # a pair that benches everyone is protect mode: list it once, as such
     for o in (*best_by_player, sit_all, pair):
@@ -373,11 +382,12 @@ def guidance(
     else:
         rec = "Keep the normal lineup: no close FG%, FT% or TO category for benching to flip."
     vol = f"{_labels(volume)} close: more games help; see streaming_plan for adds." if volume else None
-    if sit_all is not None:
-        partial = (o.gain_cats for o in (*plan.best_by_player, plan.pair) if o and o.games > sit_all.games)
-        if sit_all.gain_cats > max(0.0, *partial):
+    if sit_all is not None:  # judged on the plan's objective (P(win week) in one-win-per-week leagues)
+        partial = (o.gain for o in (*plan.best_by_player, plan.pair) if o and o.games > sit_all.games)
+        if sit_all.gain > max(0.0, *partial):
             vol = (
-                f"Benching everyone beats any partial benching ({sit_all.gain_cats:+.2f} expected cats): extra games "
-                "are more likely to hurt than help this week, so don't stream."
+                f"Benching everyone beats any partial benching ({sit_all.gain_cats:+.2f} expected cats, "
+                f"{sit_all.gain_p_win:+.0%} P(win week)): extra games are more likely to hurt than help this week, "
+                "so don't stream."
             )
     return {"recommendation": rec, "volume": vol}

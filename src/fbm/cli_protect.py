@@ -19,6 +19,13 @@ def protect(
     from fbm.gm import services as svc
 
     r = _svc(svc.protect_plan, day, opponent, top)
+    if "error_code" in r:  # HT_UNHEALTHY: no suggestions while Hashtag data is unhealthy (no fallback)
+        console.print(f"[red]{escape(str(r.get('message', r['error_code'])))}[/]")
+        for key in ("reasons", "fix"):
+            items = r.get(key) or []
+            for line in [items] if isinstance(items, str) else items:
+                console.print(f"- {escape(str(line))}")
+        return
     base = r["baseline"]
     console.print(
         f"[bold]{r['window_et']}[/] vs {escape(r['opponent'])} · benching from {r['actionable_from_et']} · "

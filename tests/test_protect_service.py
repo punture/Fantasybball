@@ -138,3 +138,19 @@ def test_protect_plan_tool_and_cli(league):
     assert "Bench: benching Big Man" in res.output and "move Big Man from C to BN" in res.output
     bad = CliRunner().invoke(app, ["protect", "--day", "2026-11-18"])
     assert bad.exit_code == 1 and "in the past" in bad.output
+
+
+def test_protect_cli_and_tool_while_hashtag_is_unhealthy(league, monkeypatch):
+    payload = {
+        "error_code": "HT_UNHEALTHY",
+        "message": "No suggestions: Hashtag Basketball data is not healthy (owner rule: no fallback).",
+        "reasons": ["projections are stale"],
+        "fix": ["Run `fbm hashtag import`."],
+        "last_ok": {},
+    }
+    monkeypatch.setattr(svc._ht, "gate", lambda conn=None: payload)
+    assert tools.call("protect_plan", {})["error_code"] == "HT_UNHEALTHY"
+    res = CliRunner().invoke(app, ["protect"])
+    assert res.exit_code == 0, res.output
+    assert "No suggestions" in res.output and "projections are stale" in res.output and "hashtag import" in res.output
+    assert "Bench" not in res.output
