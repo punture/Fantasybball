@@ -96,9 +96,10 @@ def _league() -> LeagueState:
 
 def test_league_profile_ranks():
     profiles = {p.team_key: p for p in league_profile(_league(), {"star": STAR, "scrub": SCRUB}, n_sims=200)}
-    assert profiles["t1"].cat_score["pts"] == 1.0 and profiles["t1"].cat_rank["pts"] == 1
+    # each team starts 82% of 4 generic games: the star wins PTS unless he plays none of them (~0.1%)
+    assert profiles["t1"].cat_score["pts"] >= 0.99 and profiles["t1"].cat_rank["pts"] == 1
     assert profiles["t2"].cat_score["tov"] >= 0.98
-    assert profiles["t1"].expected_score == pytest.approx(8.0)
+    assert profiles["t1"].expected_score == pytest.approx(8.0, abs=0.05)
 
 
 def test_demo_save_load_roundtrip(tmp_path):

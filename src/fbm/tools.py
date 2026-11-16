@@ -411,7 +411,8 @@ def evaluate_il_activation(
     """Quantify moving one of my IL players to the active roster (and dropping `drop` if the roster is full):
     this week's matchup odds before/after (the player counts only from `effective`, an ET date, default today, and
     from his ESPN return date at his injury play probability), rest-of-season G deltas, games gained/lost. Same shape
-    as evaluate_add_drop. `play_prob` (0-1) overrides his injury-based play probability."""
+    as evaluate_add_drop. `play_prob` (0-1) overrides his injury-based chance of playing his first game from
+    `effective` (if he sits it, he is back for each later game at sim.recovery.short)."""
     return svc.evaluate_il_activation(activate, drop, opponent, effective, play_prob)
 
 

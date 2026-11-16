@@ -77,8 +77,12 @@ def evaluate_il_activation(
     opp = svc._team(league, opponent)
     playing = teams_playing(conn, ws, we)
     models = c.models([*me.player_ids(), *opp.player_ids()], conn)
-    models[act_id].play_prob = float(prob)
-    models[act_id].return_date = None  # `prob` and the roster phases already encode his return
+    if play_prob is not None:  # override: his first game from the effective day at `play_prob`, then he recovers
+        models[act_id].set_availability(prob, available_from)
+    elif base_prob <= 0 and ret is not None:  # Out until ESPN's return date, then like a game-time decision
+        models[act_id].set_availability(prob, ret)
+    # Otherwise his injury status already sets his availability (next game, then the status's recovery rate, counted
+    # from today); the roster phases start him from the effective day.
     bank = DrawBank(models, n_sims=n, seed=42)
     banked, skip = svc._live_week(league, ws)
 

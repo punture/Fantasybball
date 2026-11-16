@@ -394,7 +394,7 @@ _ALL = [
         "sim.play_prob.gtd",
         0.6,
         "probability",
-        "Chance a game-time-decision player plays a given game.",
+        "Chance a game-time-decision player plays his team's next game (then sim.recovery.short).",
         "Judgment until injury history is collected.",
         "heuristic",
     ),
@@ -402,7 +402,7 @@ _ALL = [
         "sim.play_prob.dtd",
         0.8,
         "probability",
-        "Chance a day-to-day player plays a given game.",
+        "Chance a day-to-day player plays his team's next game (then sim.recovery.short).",
         "Judgment until injury history is collected.",
         "heuristic",
     ),
@@ -410,7 +410,7 @@ _ALL = [
         "sim.play_prob.questionable",
         0.5,
         "probability",
-        "Chance a questionable player plays.",
+        "Chance a questionable player plays his team's next game (then sim.recovery.short).",
         "NBA convention: questionable ~ 50%.",
         "heuristic",
     ),
@@ -418,7 +418,7 @@ _ALL = [
         "sim.play_prob.doubtful",
         0.2,
         "probability",
-        "Chance a doubtful player plays.",
+        "Chance a doubtful player plays his team's next game (then sim.recovery.doubtful).",
         "NBA convention: doubtful ~ 25%.",
         "heuristic",
     ),
@@ -486,6 +486,37 @@ _ALL = [
         "Streaming adds assumed for an opponent when the league has no transaction history (prior anchor).",
         "Judgment: typical active 9-cat manager; with history the manager model's adds/week replaces it.",
         "heuristic",
+    ),
+    # simulation realism: return-day availability process, synthetic games
+    Constant(
+        "sim.recovery.short",
+        0.57,
+        "probability per game",
+        "Return-day process: chance a game-time-decision / day-to-day / questionable player (or an Out player past "
+        "his ESPN return date) who has sat his team's last game(s) is back for the next one. Absences carry over: "
+        "once he sits he stays out until he returns, then plays the rest (sim.play_prob.* sets the next game).",
+        "Measured 2025-26 box scores, 252 regulars (>=30 g, >=20 mpg), 1160 absence spells: P(back next game | "
+        "missed 1) 0.57, (missed 2) 0.36, (missed 3) 0.27. Short-term statuses sit at the quick end of that mix.",
+        "measured",
+    ),
+    Constant(
+        "sim.recovery.doubtful",
+        0.4,
+        "probability per game",
+        "Return-day process: chance a doubtful player who has sat his team's last game(s) is back for the next one.",
+        "Judgment: doubtful signals a real injury; between the measured hazards after one (0.57) and two (0.36) "
+        "missed games.",
+        "heuristic",
+    ),
+    Constant(
+        "sim.synthetic_volume_cv",
+        0.2,
+        "coefficient of variation",
+        "Synthetic games (players with thin history): sd of a per-game volume factor (minutes/usage) shared by every "
+        "counting stat and attempt in the game, so attempts are overdispersed and a game's stats move together.",
+        "Measured 2025-26 box scores, regulars (>=40 g, >=20 mpg), median: minutes cv 0.21; game-to-game cv beyond "
+        "Poisson FGA 0.18, REB 0.23, AST 0.25.",
+        "measured",
     ),
     # streaming
     Constant(
