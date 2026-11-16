@@ -352,10 +352,9 @@ def data_sync() -> None:
         console.print(f"[yellow]Signals skipped: {type(err).__name__}: {err}[/]")
         return
     console.print(
-        f"[green]✓[/] forecasts logged: {early['forecasts_logged']} · signals detected: {early['signals_detected']}"
-        f" · new: {len(early['signals_new'])}"
+        f"[green]✓[/] signals detected: {early.get('signals_detected', 0)} · new: {len(early.get('signals_new', []))}"
     )
-    for s in early["signals_new"]:
+    for s in early.get("signals_new", []):
         console.print(
             f"  [bold]{s['kind']}[/] {s['direction']} {s['player']} ({s['nba']}, {s['confidence']}): {s['note']}"
         )
