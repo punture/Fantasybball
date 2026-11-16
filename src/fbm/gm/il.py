@@ -89,7 +89,7 @@ def evaluate_il_activation(
     back.pop(act_id, None)
     before_games = phase_games(phases[:1], days, playing, slots, vmap, skip, back)
     after_games = phase_games(phases, days, playing, slots, vmap, skip, back)
-    _, opp_plans = plan_team_week(opp, days, playing, slots, vmap, back)
+    _, opp_plans = plan_team_week(opp, days, playing, slots, vmap, back, capacity=league.roster_size())
     opp_totals = bank.total(svc._remaining_games(opp, opp_plans, skip), banked.get(opp.team_key, {}))
     mine = banked.get(me.team_key, {})
     before = compare(bank.total(before_games, mine), opp_totals, league.categories)

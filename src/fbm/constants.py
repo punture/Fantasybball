@@ -520,6 +520,17 @@ _ALL = [
         "Speed/coverage trade-off.",
         "heuristic",
     ),
+    Constant(
+        "stream.p_win_per_cat",
+        0.25,
+        "P(win week) per expected category",
+        "Exchange rate between P(win the matchup) and expected categories won, used in one-win-per-week (Most "
+        "Categories) leagues to express category-unit thresholds (stream.min_gain, ROS penalty, "
+        "policy.stream_min_gain) as P(win) gains.",
+        "Normal approximation: 9 categories with ~1.5 sd of categories won; +1 expected category moves P(win more "
+        "than half) by ~phi(0)/1.5 = 0.27 in a close matchup.",
+        "heuristic",
+    ),
     # trades
     Constant(
         "trade.max_their_value_loss",
@@ -919,6 +930,24 @@ _ALL = [
         "Yahoo default for 12-team leagues with 6 playoff teams.",
         "rule",
     ),
+    Constant(
+        "playoffs.default_start_week",
+        20,
+        "week",
+        "First fantasy playoff week when Yahoo settings are unavailable (falls back to the last playoffs.weeks weeks "
+        "when the season has fewer weeks).",
+        "Yahoo 2026-27 default: playoffs in weeks 20-22 (Mar 15 - Apr 4, 2027).",
+        "rule",
+    ),
+    Constant(
+        "playoffs.merged_weeks",
+        "2026-11-30..2026-12-13,2027-02-15..2027-02-28",
+        "ET date ranges",
+        "Yahoo matchup weeks longer than Monday-Sunday (comma-separated 'start..end'), used to number fantasy weeks "
+        "when Yahoo's own week bounds are unknown. Ranges outside the season are ignored.",
+        "Yahoo 2026-27: week 7 spans the NBA Cup (Nov 30 - Dec 13) and week 17 the All-Star break (Feb 15-28).",
+        "rule",
+    ),
     # lineup / IL
     Constant(
         "lineup.il_statuses",
@@ -951,6 +980,26 @@ _ALL = [
         "Lineup tie-break weight for categories that are effectively locked or lost this week (punts get 0).",
         "Keeps some ROS value for decided categories so ties among them still resolve sensibly.",
         "heuristic",
+    ),
+    Constant(
+        "lineup.il_stash_max_play_prob",
+        0.25,
+        "probability",
+        "An IL-eligible active player with a game today is stashed on IL only if his status's play probability is at "
+        "most this (doubtful or worse); a game-time decision with a game stays active. With no game today any injury "
+        "status may be stashed.",
+        "Yahoo IL+ accepts O and GTD players; stashing a likely player costs his game. Doubtful = 0.2 sits below.",
+        "heuristic",
+    ),
+    Constant(
+        "lineup.deadline",
+        "auto",
+        "auto|today|tomorrow",
+        "When lineup changes and adds take effect: auto = from Yahoo's weekly_deadline setting (Daily - Today unless "
+        "Yahoo reports a tomorrow-style code), today = same ET day (Daily - Today), tomorrow = next ET day (Daily - "
+        "Tomorrow: today's lineup is locked and a free agent added now first plays tomorrow).",
+        "Yahoo league setting 'Roster changes'; override if the auto-detected value is wrong for your league.",
+        "rule",
     ),
     # punt scenarios
     Constant(

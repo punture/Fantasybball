@@ -57,6 +57,10 @@ def partner_weights(win_rates: Mapping[str, float], build: PartnerBuild | None =
 
 
 class LeagueSim:
+    """Season-level league: each team's schedule-neutral typical week. IL players count at their rest-of-season
+    availability share (the bank's season models play at it), so trading one away costs his team what he is
+    expected to give them."""
+
     def __init__(self, league: LeagueState, bank: DrawBank, values: pd.DataFrame):
         self.league = league
         self.bank = bank
@@ -64,8 +68,10 @@ class LeagueSim:
         self.categories = league.categories
         self.n_start = len(league.starting_slots())
         self.capacity = league.roster_size()
+        self.il_capacity = sum(s.count for s in league.slots if s.position in IL_SLOTS)
         self.active = {t.team_key: [p.player_id for p in t.players if p.selected not in IL_SLOTS] for t in league.teams}
-        self.totals = {k: self.team_totals(ids) for k, ids in self.active.items()}
+        self.il = {t.team_key: [p.player_id for p in t.players if p.selected in IL_SLOTS] for t in league.teams}
+        self.totals = {k: self.team_totals(ids, self.il[k]) for k, ids in self.active.items()}
         self._base_profiles: dict[str, tuple[dict[str, float], float]] = {}
         g = values["g_total"].astype(float) if "g_total" in values.columns else pd.Series(dtype=float)
         self._pool = max(1, self.capacity * len(league.teams))
@@ -91,14 +97,38 @@ class LeagueSim:
             return max(_g(self.values, pid, "g_total") - self.replacement, 0.0)
         return max(_rank_value(self.values, pid, punts, self.categories) - self.replacement_for(punts), 0.0)
 
-    def team_totals(self, ids: Sequence[str]) -> np.ndarray:
-        if not ids:
+    def availability(self, pid: str) -> float:
+        """Share of the remaining games the player is expected to play (the bank's season model)."""
+        model = self.bank.models.get(pid)
+        return 0.0 if model is None else float(model.play_prob)
+
+    def team_totals(self, ids: Sequence[str], il: Sequence[str] = ()) -> np.ndarray:
+        """Typical-week totals of active players `ids` plus IL players `il`. IL players' games already play at their
+        availability share (season models); they also count at that share for the start share (roster crowding)."""
+        crowd = len(ids) + sum(self.availability(pid) for pid in il)
+        if crowd <= 0:
             return np.zeros((self.bank.n, 11))
-        share = min(1.0, self.n_start / len(ids)) * float(C("week.avg_games_per_week")) / GENERIC_GAMES
+        share = min(1.0, self.n_start / crowd) * float(C("week.avg_games_per_week")) / GENERIC_GAMES
         total = np.zeros((self.bank.n, 11))
-        for pid in ids:
+        for pid in [*ids, *il]:
             total += self.bank.generic_week(pid, GENERIC_GAMES)
         return total * share
+
+    def place_received(self, keep_il: Sequence[str], received: Sequence[str]) -> tuple[list[str], list[str]]:
+        """Where players a team receives land: an IL player (one his old team kept in an IL slot) takes an open IL
+        slot of the receiver (`keep_il` = its IL players after the trade) when there is one; everyone else needs an
+        active spot. Returns (to_active, to_il)."""
+        injured = {pid for ids in self.il.values() for pid in ids}
+        il_open = self.il_capacity - len(keep_il)
+        to_active: list[str] = []
+        to_il: list[str] = []
+        for pid in received:
+            if pid in injured and il_open > 0:
+                to_il.append(pid)
+                il_open -= 1
+            else:
+                to_active.append(pid)
+        return to_active, to_il
 
     def profile(
         self, team_key: str, overrides: Mapping[str, np.ndarray] | None = None
@@ -232,11 +262,19 @@ def evaluate_trade(
     if not give or not get:
         raise ValueError("a trade needs at least one player on each side")
 
-    new_mine = [pid for pid in mine_ids if pid not in give] + list(get)
-    new_theirs = [pid for pid in their_ids if pid not in get] + list(give)
+    # IL players change hands too: they land in an open IL slot of the receiver (else an active spot) and count at
+    # their availability share on both sides.
+    mine_il = [pid for pid in sim.il[my_key] if pid not in give]
+    their_il = [pid for pid in sim.il[partner_key] if pid not in get]
+    my_in, my_in_il = sim.place_received(mine_il, get)
+    their_in, their_in_il = sim.place_received(their_il, give)
+    new_mine = [pid for pid in mine_ids if pid not in give] + my_in
+    new_theirs = [pid for pid in their_ids if pid not in get] + their_in
     # roster-balance add-ins we receive (below replacement) are cut for the best free agent right away
     my_cuts = [pid for pid in get if len(get) > 1 and pid in sim.values.index and sim.above_replacement(pid) == 0.0]
     new_mine = [pid for pid in new_mine if pid not in my_cuts]
+    mine_il = [*mine_il, *(pid for pid in my_in_il if pid not in my_cuts)]
+    their_il = [*their_il, *their_in_il]
     taken = {p.player_id for t in league.teams for p in t.players}
     fas = list(free_agents)
     new_mine, my_drops, my_adds = _rebalance(
@@ -246,7 +284,7 @@ def evaluate_trade(
     new_theirs, their_drops, their_adds = _rebalance(
         new_theirs, set(give), sim.capacity, sim.values, build.punts, sim.categories, fas, taken
     )
-    overrides = {my_key: sim.team_totals(new_mine), partner_key: sim.team_totals(new_theirs)}
+    overrides = {my_key: sim.team_totals(new_mine, mine_il), partner_key: sim.team_totals(new_theirs, their_il)}
 
     sides = []
     for key, gives, gets, drops, adds, punts in (

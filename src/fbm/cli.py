@@ -619,7 +619,7 @@ def lineup(
         console.print(f"[red]{blocked['message']}[/]\n" + "\n".join(f"- {x}" for x in blocked["reasons"]))
         return
     league = _load_league(demo)
-    target = _resolve_day(day, nba_today())
+    target = _resolve_day(day, svc._first_change_day())  # Daily - Tomorrow leagues: tomorrow
     plan = _svc(svc._lineup_plan, league, target, True, "owner-ask", True)
     res, team = plan["res"], league.my_team
     value = svc.ctx().value_map()
@@ -833,8 +833,8 @@ def sim(
     value = ctx.value_map()
     models = ctx.models([*me.player_ids(), *opp.player_ids()])
     back = ctx.return_dates()
-    my_week, _ = plan_team_week(me, days, playing, league.starting_slots(), value, back)
-    opp_week, _ = plan_team_week(opp, days, playing, league.starting_slots(), value, back)
+    my_week, _ = plan_team_week(me, days, playing, league.starting_slots(), value, back, league.roster_size())
+    opp_week, _ = plan_team_week(opp, days, playing, league.starting_slots(), value, back, league.roster_size())
     odds = simulate_matchup(my_week, opp_week, models, league.categories, n_sims=n, seed=42)
 
     table = Table(
