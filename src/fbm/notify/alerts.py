@@ -258,7 +258,7 @@ def render_injury_alert(
         return None
     sections = [
         ["**Your team**", *mine] if mine else [],
-        [f"**Opponent · {opponent or 'this week'}**", *theirs] if theirs else [],
+        [f"**Opponent · {clip(opponent, 40) or 'this week'}**", *theirs] if theirs else [],  # team name: untrusted
         ["**Next man up (free agents)**", *picks] if picks else [],
     ]
     return fit([f"**Injury update · {when}**"], sections, ALERT_LIMIT, "*{n} more section(s) cut.*")
@@ -303,11 +303,17 @@ def _snapshot_age_min(league: LeagueState, now: datetime) -> float | None:
     return (now - (fetched if fetched.tzinfo else fetched.replace(tzinfo=UTC))).total_seconds() / 60
 
 
+def _my_tip_is_near(conn: sqlite3.Connection, league: LeagueState, now: datetime) -> bool:
+    """Does any of my players tip off within LINEUP_WINDOW (and not yet)?"""
+    _, upcoming = tipoffs(_games(conn, nba_today(now)), now)
+    tips = [upcoming[p.nba_team] for p in league.my_team.players if p.nba_team in upcoming]
+    return bool(tips) and min(tips) - now <= LINEUP_WINDOW
+
+
 def _lineup_findings(svc: Any, conn: sqlite3.Connection, league: LeagueState, now: datetime):
     day = nba_today(now)
     playing, upcoming = tipoffs(_games(conn, day), now)
-    tips = [upcoming[p.nba_team] for p in league.my_team.players if p.nba_team in upcoming]
-    if not tips or min(tips) - now > LINEUP_WINDOW:
+    if not _my_tip_is_near(conn, league, now):
         return None  # nothing of mine tips off soon: skip the optimizer
     plan = svc._lineup_plan(league, day, True, None, False)
     findings = find_lineup_issues(
@@ -325,13 +331,16 @@ def lineup_alert(conn: sqlite3.Connection, now: datetime, tz: tzinfo) -> tuple[s
     if (blocked := svc._ht.gate()) is not None:
         raise AlertError(blocked.get("message") or "Suggestions are paused (Hashtag unhealthy).")
     league = svc.active_league()
-    found = _lineup_findings(svc, conn, league, now)
+    if not _my_tip_is_near(conn, league, now):
+        return None, None  # nothing of mine tips off soon: no Yahoo read, no optimizer
     age = _snapshot_age_min(league, now)
-    if found and league.source == "yahoo" and age is not None and age > SNAPSHOT_MAX_AGE_MIN:
+    if league.source == "yahoo" and age is not None and age > SNAPSHOT_MAX_AGE_MIN:
+        # Yahoo statuses (O / GTD) and the lineup the owner has set are only as fresh as the snapshot (served up to
+        # an hour): before a tip-off, re-read it so a starter ruled out since then is seen in time.
         from fbm.league.yahoo_league import load_or_refresh
 
-        league = svc._roll_week(load_or_refresh(SNAPSHOT_MAX_AGE_MIN))  # alert only on a fresh Yahoo read
-        found = _lineup_findings(svc, conn, league, now)
+        league = svc._roll_week(load_or_refresh(SNAPSHOT_MAX_AGE_MIN))
+    found = _lineup_findings(svc, conn, league, now)
     if not found:
         return None, None
     findings, blocked_moves = found

@@ -54,21 +54,34 @@ def _escape(text: str) -> str:
     return html.escape(text, quote=False)
 
 
-def _styled(text: str) -> str:
-    out = _escape(text)
-    out = _LINK.sub(lambda m: f'<a href="{m.group(2).replace(chr(34), "&quot;")}">{m.group(1)}</a>', out)
-    out = _BOLD.sub(r"<b>\1</b>", out)
-    return _ITALIC.sub(r"<i>\1</i>", out)
+_SLOT = re.compile("\x00(\\d+)\x00")  # placeholder for an already rendered code span or link
+
+
+def _emphasis(escaped: str) -> str:
+    return _ITALIC.sub(r"<i>\1</i>", _BOLD.sub(r"<b>\1</b>", escaped))
 
 
 def inline(text: str) -> str:
-    """One line of Markdown -> Telegram HTML (code spans are escaped verbatim)."""
-    parts, pos = [], 0
-    for m in _CODE.finditer(text):
-        parts += [_styled(text[pos : m.start()]), f"<code>{_escape(m.group(1))}</code>"]
-        pos = m.end()
-    parts.append(_styled(text[pos:]))
-    return "".join(parts)
+    """One line of Markdown -> Telegram HTML. Code spans are escaped verbatim and links are rendered first (kept
+    as placeholders), so ** / * never reach inside a code span or a URL, while bold/italic may still wrap them."""
+    saved: list[str] = []
+
+    def keep(rendered: str) -> str:
+        saved.append(rendered)
+        return f"\x00{len(saved) - 1}\x00"
+
+    text = text.replace("\x00", "")
+    text = _CODE.sub(lambda m: keep(f"<code>{_escape(m.group(1))}</code>"), text)
+    text = _LINK.sub(
+        lambda m: keep(
+            f'<a href="{_escape(m.group(2)).replace(chr(34), "&quot;")}">{_emphasis(_escape(m.group(1)))}</a>'
+        ),
+        text,
+    )
+    out = _emphasis(_escape(text))
+    while _SLOT.search(out):  # link text may hold a code span: restore until no placeholder is left
+        out = _SLOT.sub(lambda m: saved[int(m.group(1))], out)
+    return out
 
 
 def _line(line: str) -> str:
@@ -233,32 +246,48 @@ def _payload(r: httpx.Response) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _retry_after(data: dict[str, Any]) -> float:
+    try:
+        return max(0.0, float((data.get("parameters") or {}).get("retry_after") or 1))
+    except (TypeError, ValueError):
+        return 1.0
+
+
 def _post(client: httpx.Client, token: str, payload: dict[str, Any], sleep: Sleep) -> None:
+    """POST one sendMessage; returns only once Telegram confirmed it (ok: true), else raises TelegramError.
+    Up to ATTEMPTS tries for network errors, 429 and 5xx; the one plain-text resend after an HTML parse error is
+    not counted as a retry."""
     url = f"{API}/bot{token}/sendMessage"
-    for attempt in range(1, ATTEMPTS + 1):
-        last = attempt == ATTEMPTS
+    attempt = 1
+    while True:
+        last = attempt >= ATTEMPTS
         try:
             r = client.post(url, json=payload)
         except httpx.HTTPError as err:  # message may carry the URL (and so the token): report the type only
             if not last:
                 sleep(2 ** (attempt - 1))
+                attempt += 1
                 continue
             raise TelegramError(
                 f"Telegram unreachable ({type(err).__name__}); check the internet connection."
             ) from None
+        except httpx.InvalidURL:
+            raise TelegramError("The stored bot token has invalid characters: run `fbm notify setup`.") from None
         data = _payload(r)
         if r.status_code == 200 and data.get("ok"):
             return
         desc = str(data.get("description") or r.reason_phrase or "no detail")[:200]
         if r.status_code == 429:
-            wait = float((data.get("parameters") or {}).get("retry_after") or 1)
+            wait = _retry_after(data)
             if not last and wait <= MAX_RETRY_AFTER_S:
                 sleep(wait)
+                attempt += 1
                 continue
             raise TelegramError(f"Telegram rate limit (429): retry after {wait:.0f}s.")
         if r.status_code >= 500:
             if not last:
                 sleep(2 ** (attempt - 1))
+                attempt += 1
                 continue
             raise TelegramError(f"Telegram server error {r.status_code}: {desc}")
         if r.status_code == 401:
@@ -330,6 +359,8 @@ def detect_chat_ids(token: str, client: httpx.Client | None = None) -> list[dict
         r = http.get(f"{API}/bot{token}/getUpdates", params={"timeout": 0, "limit": 50})
     except httpx.HTTPError as err:
         raise TelegramError(f"Telegram unreachable ({type(err).__name__}).") from None
+    except httpx.InvalidURL:
+        raise TelegramError("That bot token has invalid characters.") from None
     finally:
         if own:
             http.close()

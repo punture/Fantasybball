@@ -154,6 +154,36 @@ def test_html_parse_error_falls_back_to_plain_text():
     assert payloads[-1]["text"] == "a & b" and "parse_mode" not in payloads[-1]
 
 
+def test_plain_text_resend_after_the_last_retry_is_still_confirmed():
+    """A parse error on the final retry must not end the loop as if Telegram had accepted the message."""
+    payloads = []
+    replies = [
+        httpx.Response(502, json={"ok": False, "description": "Bad Gateway"}),
+        httpx.Response(502, json={"ok": False, "description": "Bad Gateway"}),
+        httpx.Response(400, json={"ok": False, "description": "Bad Request: can't parse entities"}),
+        httpx.Response(500, json={"ok": False, "description": "Internal"}),
+    ]
+
+    def handler(request):
+        payloads.append(json.loads(request.content))
+        return replies[len(payloads) - 1]
+
+    with pytest.raises(telegram.TelegramError, match="server error 500"):
+        telegram.send("**a**", settings=SETTINGS, token=TOKEN, client=_client(handler), sleep=lambda s: None)
+    assert len(payloads) == 4 and "parse_mode" not in payloads[-1]
+
+
+def test_emphasis_never_reaches_inside_urls_or_code():
+    assert telegram.inline("[x](https://a.com/*b*_c)") == '<a href="https://a.com/*b*_c">x</a>'
+    assert telegram.inline("**see [docs](https://a.com) and `x*y*z`**") == (
+        '<b>see <a href="https://a.com">docs</a> and <code>x*y*z</code></b>'
+    )
+    assert telegram.inline("[`fbm stream` now](https://a.com)") == (
+        '<a href="https://a.com"><code>fbm stream</code> now</a>'
+    )
+    assert telegram.inline("a \x000\x00 b") == "a 0 b"  # placeholders can't be forged
+
+
 def test_send_needs_chat_id_and_token(monkeypatch):
     with pytest.raises(telegram.TelegramError, match="chat id"):
         telegram.send("x", settings=Settings(), token=TOKEN)

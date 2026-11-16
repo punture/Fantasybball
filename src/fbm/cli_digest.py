@@ -32,6 +32,8 @@ def _deliver(subject: str, text: str, kind: str) -> None:
         result = dispatch.send(subject, text, kind, title=False)
     except NotifyError as err:
         _fail(str(err))
+    except Exception as err:  # noqa: BLE001 - e.g. malformed quiet_hours or a database error: short, exit 1
+        _fail(f"notify: {type(err).__name__}: {err}")
     if result["status"] != "sent":
         failed = [d["detail"] for d in result.get("deliveries", []) if d["status"] != "sent"]
         typer.echo(f"notify: {result['status']} ({'; '.join(failed) or result.get('detail', '')})", err=True)
@@ -45,6 +47,15 @@ def _release_held() -> None:
         dispatch.flush_held()
     except Exception as err:  # noqa: BLE001 - the alert itself succeeded
         typer.echo(f"notify: held messages not released ({type(err).__name__})", err=True)
+
+
+def _save_state(conn, key: str, value: dict) -> None:
+    from fbm.notify import state as notify_state
+
+    try:
+        notify_state.put(conn, key, value)
+    except Exception as err:  # noqa: BLE001 - reported on stderr, exit 1 (the next run may repeat this alert)
+        _fail(f"alert state not saved ({type(err).__name__}: {err})")
 
 
 def _owner_zone():
@@ -82,12 +93,11 @@ def alert_lineup(send: bool = typer.Option(False, "--send", help="Also deliver i
     bench player with a game who should start, or a changed recommendation. Exact manual steps (FBM never changes
     Yahoo). Prints NO_REPLY otherwise; each recommendation is sent once per ET game day. Run every 15 minutes."""
     from fbm.notify import alerts
-    from fbm.notify import state as notify_state
     from fbm.notify.text import NO_REPLY
     from fbm.store import db
 
-    conn = db.connect()
     try:
+        conn = db.connect()
         text, new_state = alerts.lineup_alert(conn, datetime.now(UTC), _owner_zone())
     except alerts.AlertError as err:  # suggestions paused (Hashtag unhealthy): nothing to say, not a failure
         typer.echo(f"note: {err}", err=True)
@@ -102,7 +112,7 @@ def alert_lineup(send: bool = typer.Option(False, "--send", help="Also deliver i
     typer.echo(text)
     if send:
         _deliver("Lineup alert", text, "alert")
-    notify_state.put(conn, alerts.LINEUP_KEY, new_state)
+    _save_state(conn, alerts.LINEUP_KEY, new_state)
 
 
 @alert_app.command("injuries")
@@ -112,12 +122,11 @@ def alert_injuries(
     """New injury/status changes on your roster and your opponent's, plus new 'next man up' / role-change pickups
     among free agents, each with a one-line what to do. Prints NO_REPLY when nothing is new since the last run."""
     from fbm.notify import alerts
-    from fbm.notify import state as notify_state
     from fbm.notify.text import NO_REPLY
     from fbm.store import db
 
-    conn = db.connect()
     try:
+        conn = db.connect()
         text, new_state = alerts.injury_alert(conn, datetime.now(UTC), _owner_zone())
     except Exception as err:  # noqa: BLE001 - reported on stderr, exit 1
         _fail(f"{type(err).__name__}: {err}")
@@ -129,4 +138,4 @@ def alert_injuries(
         typer.echo(text)
         if send:
             _deliver("Injury update", text, "alert")
-    notify_state.put(conn, alerts.INJURY_KEY, new_state)
+    _save_state(conn, alerts.INJURY_KEY, new_state)

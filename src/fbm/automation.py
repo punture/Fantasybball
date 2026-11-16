@@ -40,6 +40,7 @@ CRON_BEGIN = "# >>> FBM automation (managed by `fbm automation`; do not edit) >>
 CRON_END = "# <<< FBM automation <<<"
 LOCK_STALE_SECONDS = 3 * 3600
 JOB_TIMEOUT_SECONDS = 2 * 3600
+LOG_KEEP_DAYS = 30  # run logs older than this are deleted (engine-only lineup-guard alone writes 56 a day)
 
 HEADLESS_AGENTS = ("copilot", "claude-code", "codex", "cursor", "gemini")
 
@@ -343,6 +344,20 @@ def _redact(cmd: list[str], prompt_len: int = 60) -> str:
     return " ".join((a if len(a) <= prompt_len else a[:prompt_len] + "...") for a in cmd)
 
 
+def prune_logs(job: str, log_dir: Path = LOG_DIR, keep_days: int = LOG_KEEP_DAYS) -> int:
+    """Delete this job's per-run logs (`<job>-<UTC stamp>.log`) older than `keep_days`. Returns how many."""
+    cutoff = time.time() - keep_days * 86400
+    removed = 0
+    for old in log_dir.glob(f"{job}-????????T??????Z.log"):
+        try:
+            if old.stat().st_mtime < cutoff:
+                old.unlink()
+                removed += 1
+        except OSError:
+            continue  # in use or already gone: try again next run
+    return removed
+
+
 def run_job(
     job: str,
     s: Settings,
@@ -371,6 +386,7 @@ def run_job(
         return 3, log
     code = 0
     try:
+        prune_logs(job, log_dir)
         cmds = plan_run(job, s, mode)
         with log.open("w", encoding="utf-8") as f:
             f.write(f"job={job} mode={mode} agent={s.agent} start={now.isoformat()}\n")

@@ -76,3 +76,23 @@ def test_launchd_lists_every_run(tmp_path):
     window = auto.CATALOG["lineup-guard"].engine_et_triggers
     plist = auto.launchd_plist("lineup-guard", window, ["/v/py"], tmp_path)
     assert plist.count("<key>Minute</key>") == 56
+
+
+def test_run_logs_older_than_the_retention_are_pruned(tmp_path):
+    """lineup-guard runs 56 times a day in engine-only mode: old per-run logs must not pile up forever."""
+    import os
+    import time
+
+    old = tmp_path / "lineup-guard-20260101T100000Z.log"
+    fresh = tmp_path / "lineup-guard-20261116T100000Z.log"
+    other = tmp_path / "daily-gm-20260101T100000Z.log"
+    launchd = tmp_path / "lineup-guard-launchd.log"
+    for f in (old, fresh, other, launchd):
+        f.write_text("x", encoding="utf-8")
+    stale = time.time() - (auto.LOG_KEEP_DAYS + 1) * 86400
+    for f in (old, other, launchd):
+        os.utime(f, (stale, stale))
+    code, log = auto.run_job("lineup-guard", Settings(), runner=lambda c, w: (0, "NO_REPLY"), log_dir=tmp_path)
+    assert code == 0 and log.exists()
+    assert not old.exists() and fresh.exists()
+    assert other.exists() and launchd.exists()  # other jobs' logs and the launchd stdout log are left alone

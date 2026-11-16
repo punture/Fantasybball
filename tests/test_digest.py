@@ -174,6 +174,40 @@ def test_untrusted_text_is_neutralized():
     assert "](https" not in text and "(click)(https://evil.example) x 'y'" in text
 
 
+def test_team_names_are_untrusted_and_never_link():
+    evil = "[Verify](https://evil.example) **now**"
+    odds = {**_odds(), "opponent": evil}
+    offers = {"incoming_trades": [{"trader": evil, "evaluation": {"verdict": "decline"}}], "waiver_claims": []}
+    d = _data(odds=odds, offers=offers)
+    d["injuries"]["opponent"] = evil
+    d["overview"]["this_week_opponent"] = evil
+    text = digest.render(d, SETTINGS)
+    assert "](https" not in text and "**now**" not in text
+    assert "Trade offer from (Verify)(https://evil.example) now: FBM says decline" in text
+
+
+def test_a_malformed_engine_output_costs_one_section_only():
+    stream = _data()["stream"]
+    stream["moves"] = [{"add": "Toumani Camara"}]  # unexpected shape: no gain / games
+    d = _data(stream=stream, health={"checks": [{"status": "WARN"}]})
+    text = digest.render(d, SETTINGS)
+    assert "**Best stream**: unavailable (KeyError while rendering)" in text
+    assert "**Health**: unavailable (KeyError while rendering)" in text
+    assert "**Lineup today**" in text and "**Matchup vs Euro Steppers**" in text
+    head = digest.render(_data(odds={"opponent": "X"}), SETTINGS)  # verdict itself can't be computed
+    assert head.splitlines()[1].startswith("**Verdict:** unavailable") and "**Lineup today**" in head
+
+
+def test_weekly_plan_totals_only_when_every_planned_move_is_listed():
+    stream = _data()["stream"]
+    stream["planner_moves_considered"] = 3  # the engine recommends 1 of its 3 planned moves
+    d = _data(kind="weekly", stream=stream)
+    text = digest.render(d, SETTINGS)
+    assert "Add **Toumani Camara**" in text and "Expected cats 4.9 → 5.2" not in text
+    stream["planner_moves_considered"] = 1
+    assert "- Expected cats 4.9 → 5.2; win the week 63% → 70%" in digest.render(d, SETTINGS)
+
+
 def _league():
     me = FantasyTeam("t1", "Me", players=[RosterPlayer("a", "A", "BOS", ("PG", "UTIL"), "PG")])
     them = FantasyTeam("t2", "Them", players=[RosterPlayer("b", "B", "LAL", ("C", "UTIL"), "C")])
@@ -236,6 +270,19 @@ def test_collect_isolates_each_section_and_uses_the_trigger():
     weekly = digest.collect("weekly", record=False, now=NOW, svc=svc)
     assert "lineup" not in weekly and "waiver" not in weekly
     assert calls[-1][0] == "health_check" and ("streaming_plan", (), {"trigger": "owner-ask"}) in calls
+
+
+def test_unknown_opponent_still_lists_my_injuries():
+    svc, _calls = _fake_svc(injuries={"injuries": [{"espn_id": "a", "name": "A", "status": "Out"}]})
+
+    def no_opponent(league):
+        raise RuntimeError("week rollover")
+
+    svc._default_opponent = no_opponent
+    d = digest.collect("daily", now=NOW, svc=svc)
+    mine = [{"espn_id": "a", "name": "A", "status": "Out", "slot": "PG"}]
+    assert d["injuries"] == {"opponent": None, "mine": mine, "opp": []}
+    assert "- Yours: **A** Out" in digest.render(d, SETTINGS)
 
 
 def test_top_target_asks_waiver_decision():

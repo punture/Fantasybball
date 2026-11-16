@@ -164,6 +164,37 @@ def test_lineup_alert_skips_the_optimizer_when_no_tip_is_near(world, monkeypatch
     assert alerts.lineup_alert(world.conn, TIP_BOS - timedelta(hours=5), CHI) == (None, None)
 
 
+def test_yahoo_lineup_alert_rereads_a_stale_snapshot_before_a_tip(world, monkeypatch):
+    """Yahoo statuses come from the snapshot (served up to an hour): a starter ruled out since the last read must
+    still be caught before tip-off, so a stale snapshot is re-read whenever one of my tip-offs is near."""
+    from fbm.league import yahoo_league
+
+    now = TIP_BOS - timedelta(minutes=45)
+    stale = _league([P("a", "BOS", "PG"), P("b", "NYK", "BN")])  # healthy an hour ago: nothing to say
+    stale.source, stale.fetched_at = "yahoo", (now - timedelta(minutes=50)).isoformat()
+    fresh = _league([P("a", "BOS", "PG", "O"), P("b", "NYK", "BN")])  # ruled out since
+    fresh.source, fresh.fetched_at = "yahoo", now.isoformat()
+    reads = []
+    monkeypatch.setattr(svc, "active_league", lambda: stale)
+    monkeypatch.setattr(yahoo_league, "load_or_refresh", lambda age: reads.append(age) or fresh)
+    monkeypatch.setattr(svc, "_roll_week", lambda league: league)
+
+    def plan(league, day, il, trig, log):  # the optimizer only benches A once he is ruled out
+        out = league.my_team.players[0].is_out
+        return {
+            "res": SimpleNamespace(assignments={"a": "BN", "b": "PG"} if out else {"a": "PG", "b": "BN"}),
+            "moves": [],
+        }
+
+    monkeypatch.setattr(svc, "_lineup_plan", plan)
+    text, state = alerts.lineup_alert(world.conn, now, CHI)
+    assert reads == [alerts.SNAPSHOT_MAX_AGE_MIN] and state is not None
+    assert "**A** is O and in your lineup" in text and "- B: BN → PG" in text
+    reads.clear()
+    assert alerts.lineup_alert(world.conn, TIP_BOS - timedelta(hours=4), CHI) == (None, None)
+    assert reads == []  # no tip-off near: no Yahoo read
+
+
 def _event(conn, pid, old, new, comment=""):
     conn.execute(
         "INSERT INTO injury_events(espn_id, name, team, old_status, new_status, comment, observed_at) "

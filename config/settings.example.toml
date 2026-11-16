@@ -46,7 +46,8 @@ openclaw_bin = "openclaw"
 email_enabled = false
 # Empty = send to the Gmail sender address.
 recipients = []
-# Local-time window with no non-urgent email, e.g. "23:00-07:00". Empty = none.
+# Window in your time zone ([owner] timezone) when non-urgent messages (digests, reports) wait, on every
+# channel, e.g. "23:00-07:00"; alerts and approval requests still arrive. Empty = none.
 quiet_hours = ""
 
 [hashtag]

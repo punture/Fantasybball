@@ -73,13 +73,17 @@ def _first_tip(svc: Any, now: datetime) -> datetime | None:
 
 def _injuries(svc: Any) -> dict[str, Any]:
     league = svc.active_league()
-    opp = svc._default_opponent(league)
+    try:
+        opp = svc._default_opponent(league)
+    except Exception:  # noqa: BLE001 - opponent unknown (week rollover): my roster only
+        opp = None
     slots = {p.player_id: p.selected for p in league.my_team.players}
+    theirs = set(opp.player_ids()) if opp else set()
     rows = svc.injuries("league")["injuries"]
     return {
-        "opponent": opp.name,
+        "opponent": opp.name if opp else None,
         "mine": [{**r, "slot": slots[r["espn_id"]]} for r in rows if r["espn_id"] in slots],
-        "opp": [r for r in rows if r["espn_id"] in set(opp.player_ids())],
+        "opp": [r for r in rows if r["espn_id"] in theirs],
     }
 
 
@@ -126,13 +130,26 @@ def _unavailable(title: str, value: Unavailable) -> list[str]:
     return [f"**{title}**: unavailable ({value.reason})"]
 
 
+def _team(name: Any) -> str:
+    """A fantasy team name: managers choose them, so they are untrusted data and never format or link."""
+    return clip(name, 40) or "?"
+
+
+def _guarded(title: str, render: Callable[[], list[str]]) -> list[str]:
+    """One section's lines; an unexpected engine output shape costs that section only, never the digest."""
+    try:
+        return render()
+    except Exception as err:  # noqa: BLE001 - one bad section never kills the digest
+        return _unavailable(title, Unavailable(f"{type(err).__name__} while rendering"))
+
+
 def _verdict(d: Mapping[str, Any]) -> str:
     odds, weekly = d.get("odds"), d["kind"] == "weekly"
     if _ok(odds):
         p = float(odds["p_win_majority"])
         label = "Favored" if p >= 0.6 else "Underdog" if p < 0.4 else "Toss-up"
         head = (
-            f"{label} vs {odds['opponent']}: **{pct(p)}** to win the week "
+            f"{label} vs {_team(odds['opponent'])}: **{pct(p)}** to win the week "
             f"({float(odds['expected_cats_won']):.1f} of {len(odds['categories'])} cats expected)."
         )
     else:
@@ -171,7 +188,7 @@ def _header(d: Mapping[str, Any]) -> list[str]:
             or (odds["opponent"] if _ok(odds) else None)
             or (inj["opponent"] if _ok(inj) else None)
         )
-        bits = [f"{ov['my_team']} vs {opponent or '?'}"]
+        bits = [f"{_team(ov['my_team'])} vs {_team(opponent)}"]
         if week.get("number"):
             bits.append(f"week {week['number']}")
         if week.get("start") and week.get("end"):
@@ -210,7 +227,7 @@ def _matchup(d: Mapping[str, Any]) -> list[str]:
         return _unavailable("Matchup", odds) if isinstance(odds, Unavailable) else []
     cats = sorted(odds["categories"], key=lambda c: -float(c["p_win"]))
     games = odds.get("games_started") or {}
-    lines = [f"**Matchup vs {odds['opponent']}** ({odds.get('window_et', '')} ET)"]
+    lines = [f"**Matchup vs {_team(odds['opponent'])}** ({odds.get('window_et', '')} ET)"]
     if d["kind"] == "weekly":
         lines.append("- " + " · ".join(f"{c['cat']} {pct(c['p_win'])}" for c in cats))
     else:
@@ -240,7 +257,7 @@ def _injury_section(d: Mapping[str, Any]) -> list[str]:
         return ["**Injuries**", "- None on either roster."]
     lines = ["**Injuries**"]
     lines += [f"- Yours: {_injury_line(r)}" for r in inj["mine"][:4]]
-    lines += [f"- {inj['opponent']}: {_injury_line(r)}" for r in inj["opp"][:4]]
+    lines += [f"- {_team(inj['opponent'])}: {_injury_line(r)}" for r in inj["opp"][:4]]
     return lines
 
 
@@ -269,7 +286,7 @@ def _stream(d: Mapping[str, Any]) -> list[str]:
     if not moves:
         return [*lines, "- No add/drop beats standing pat."]
     lines += [_move_line(m) for m in (moves[:4] if weekly else moves[:1])]
-    if weekly:
+    if weekly and len(moves) == stream.get("planner_moves_considered", len(moves)):
         before, after = stream.get("baseline") or {}, stream.get("after_plan") or {}
         if "expected_cats" in before and "expected_cats" in after:
             lines.append(
@@ -328,7 +345,7 @@ def _queue(d: Mapping[str, Any]) -> list[str]:
         for t in offers.get("incoming_trades", [])[:3]:
             verdict = (t.get("evaluation") or {}).get("verdict")
             lines.append(
-                f"- Trade offer from {t.get('trader') or 'another manager'}"
+                f"- Trade offer from {_team(t.get('trader') or 'another manager')}"
                 + (f": FBM says {verdict}" if verdict else "")
                 + " → accept or reject in Yahoo"
             )
@@ -350,27 +367,34 @@ def _health(d: Mapping[str, Any]) -> list[str]:
 def render(d: Mapping[str, Any], settings: Settings | None = None, limit: int = DIGEST_LIMIT) -> str:
     """The digest text (FBM's Markdown subset, at most `limit` characters)."""
     tz = zone((settings or load_settings()).owner_timezone)
-    if d["kind"] == "weekly":
-        sections: Sequence[list[str]] = (
-            _matchup(d),
-            _stream(d),
-            _injury_section(d),
-            _pickups(d),
-            _queue(d),
-            _health(d),
+    weekly = d["kind"] == "weekly"
+    if weekly:
+        parts: Sequence[tuple[str, Callable[[], list[str]]]] = (
+            ("Matchup", lambda: _matchup(d)),
+            ("Streaming plan", lambda: _stream(d)),
+            ("Injuries", lambda: _injury_section(d)),
+            ("Pickup radar", lambda: _pickups(d)),
+            ("Your queue", lambda: _queue(d)),
+            ("Health", lambda: _health(d)),
         )
     else:
-        sections = (
-            _lineup(d, tz),
-            _matchup(d),
-            _injury_section(d),
-            _stream(d),
-            _target(d),
-            _queue(d),
-            _pickups(d),
-            _health(d),
+        parts = (
+            ("Lineup today", lambda: _lineup(d, tz)),
+            ("Matchup", lambda: _matchup(d)),
+            ("Injuries", lambda: _injury_section(d)),
+            ("Best stream", lambda: _stream(d)),
+            ("Top waiver target", lambda: _target(d)),
+            ("Your queue", lambda: _queue(d)),
+            ("Pickup radar", lambda: _pickups(d)),
+            ("Health", lambda: _health(d)),
         )
-    return fit(_header(d), sections, limit, "*{n} more section(s) cut to fit: run `fbm digest` for the full brief.*")
+    sections = [_guarded(title, render) for title, render in parts]
+    try:
+        head = _header(d)
+    except Exception as err:  # noqa: BLE001 - still deliver the sections
+        kind = "weekly preview" if weekly else "daily"
+        head = [f"**FBM {kind} · {day_label(d['today_et'])}**", f"**Verdict:** unavailable ({type(err).__name__})."]
+    return fit(head, sections, limit, "*{n} more section(s) cut to fit: run `fbm digest` for the full brief.*")
 
 
 def build(
