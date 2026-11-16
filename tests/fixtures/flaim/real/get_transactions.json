@@ -1,0 +1,182 @@
+{
+ "success": true,
+ "data": {
+  "platform": "yahoo",
+  "sport": "basketball",
+  "league_id": "999.l.12345",
+  "season_year": 2026,
+  "window": {
+   "mode": "recent_30_days_timestamp",
+   "weeks": [],
+   "start_timestamp_ms": 1792243306063,
+   "end_timestamp_ms": 1794835306063,
+   "returned_rows": 6
+  },
+  "dropped_invalid_timestamp_count": 0,
+  "count": 6,
+  "transactions": [
+   {
+    "transaction_id": "999.l.12345.tr.165",
+    "type": "add",
+    "status": "complete",
+    "timestamp": 1794834869000,
+    "date": "2026-11-16",
+    "week": null,
+    "team_ids": [
+     "999.l.12345.t.8"
+    ],
+    "players_added": [
+     {
+      "id": "6038",
+      "name": "Robert Williams III",
+      "position": "C",
+      "team": "POR"
+     }
+    ],
+    "players_dropped": [
+     {
+      "id": "6619",
+      "name": "Sam Hauser",
+      "position": "SF,PF",
+      "team": "BOS"
+     }
+    ],
+    "faab_bid": null,
+    "waiver_priority": null,
+    "draft_picks": null
+   },
+   {
+    "transaction_id": "999.l.12345.tr.164",
+    "type": "drop",
+    "status": "complete",
+    "timestamp": 1794833435000,
+    "date": "2026-11-16",
+    "week": null,
+    "team_ids": [
+     "999.l.12345.t.1"
+    ],
+    "players_added": [],
+    "players_dropped": [
+     {
+      "id": "10312",
+      "name": "Pelle Larsson",
+      "position": "SG,SF",
+      "team": "MIA"
+     }
+    ],
+    "faab_bid": null,
+    "waiver_priority": null,
+    "draft_picks": null
+   },
+   {
+    "transaction_id": "999.l.12345.tr.162",
+    "type": "add",
+    "status": "complete",
+    "timestamp": 1794781845000,
+    "date": "2026-11-15",
+    "week": null,
+    "team_ids": [
+     "999.l.12345.t.8"
+    ],
+    "players_added": [
+     {
+      "id": "6619",
+      "name": "Sam Hauser",
+      "position": "SF,PF",
+      "team": "BOS"
+     }
+    ],
+    "players_dropped": [
+     {
+      "id": "6581",
+      "name": "Neemias Queta",
+      "position": "C",
+      "team": "BOS"
+     }
+    ],
+    "faab_bid": null,
+    "waiver_priority": null,
+    "draft_picks": null
+   },
+   {
+    "transaction_id": "999.l.12345.tr.160",
+    "type": "add",
+    "status": "complete",
+    "timestamp": 1794762396000,
+    "date": "2026-11-15",
+    "week": null,
+    "team_ids": [
+     "999.l.12345.t.4"
+    ],
+    "players_added": [
+     {
+      "id": "10274",
+      "name": "Kel'el Ware",
+      "position": "C",
+      "team": "MIL"
+     }
+    ],
+    "players_dropped": [],
+    "faab_bid": null,
+    "waiver_priority": null,
+    "draft_picks": null
+   },
+   {
+    "transaction_id": "999.l.12345.tr.159",
+    "type": "add",
+    "status": "complete",
+    "timestamp": 1794744657000,
+    "date": "2026-11-15",
+    "week": null,
+    "team_ids": [
+     "999.l.12345.t.8"
+    ],
+    "players_added": [
+     {
+      "id": "6581",
+      "name": "Neemias Queta",
+      "position": "C",
+      "team": "BOS"
+     }
+    ],
+    "players_dropped": [
+     {
+      "id": "4622",
+      "name": "Jrue Holiday",
+      "position": "PG,SG",
+      "team": "POR"
+     }
+    ],
+    "faab_bid": null,
+    "waiver_priority": null,
+    "draft_picks": null
+   },
+   {
+    "transaction_id": "999.l.12345.tr.158",
+    "type": "drop",
+    "status": "complete",
+    "timestamp": 1794743308000,
+    "date": "2026-11-15",
+    "week": null,
+    "team_ids": [
+     "999.l.12345.t.8"
+    ],
+    "players_added": [],
+    "players_dropped": [
+     {
+      "id": "6742",
+      "name": "Karlo Matković",
+      "position": "PF,C",
+      "team": "NOP"
+     }
+    ],
+    "faab_bid": null,
+    "waiver_priority": null,
+    "draft_picks": null
+   }
+  ],
+  "limitations": {
+   "possibly_truncated": true
+  }
+ }
+}

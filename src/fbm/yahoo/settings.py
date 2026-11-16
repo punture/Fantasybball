@@ -62,6 +62,8 @@ LEAGUE_FIELDS = (
 
 
 def fetch_settings(client: YahooClient, league_key: str) -> dict[str, Any]:
+    if getattr(client, "is_flaim", False):  # the Flaim route (fbm.flaim.reads.FlaimLeague)
+        return client.settings_raw(league_key)  # same shape, for summarize()
     fc = client.get(f"league/{league_key}/settings")
     return fc["league"]
 

@@ -1,0 +1,65 @@
+{
+ "success": true,
+ "data": {
+  "leagueId": "466.l.4242",
+  "seasonYear": 2026,
+  "position": "ALL",
+  "count": 4,
+  "ordering": "platform_rostered_rate_desc",
+  "capabilities": {
+   "acquisitionState": true,
+   "rosteredRate": true,
+   "startedRate": false
+  },
+  "ownershipScope": "platform_global",
+  "leagueKey": "466.l.4242",
+  "leagueName": "Hardwood Classic",
+  "freeAgents": [
+   {
+    "id": "6101",
+    "playerKey": "466.p.6101",
+    "name": "Bennedict Mathurin",
+    "team": "IND",
+    "position": "SG,SF",
+    "percentOwned": 61,
+    "status": null,
+    "ownershipType": "waivers",
+    "acquisitionState": "waivers",
+    "waiverDate": "2026-11-19"
+   },
+   {
+    "id": "6102",
+    "playerKey": "466.p.6102",
+    "name": "Deni Avdija",
+    "team": "POR",
+    "position": "SF,PF",
+    "percentOwned": 55,
+    "status": "GTD",
+    "ownershipType": "freeagents",
+    "acquisitionState": "free_agent"
+   },
+   {
+    "id": "6103",
+    "playerKey": "466.p.6103",
+    "name": "Isaiah Hartenstein",
+    "team": "OKC",
+    "position": "C",
+    "percentOwned": 48,
+    "status": null,
+    "ownershipType": "freeagents",
+    "acquisitionState": "free_agent"
+   },
+   {
+    "id": "6104",
+    "playerKey": "466.p.6104",
+    "name": "Totally Unknown Prospect",
+    "team": "CHA",
+    "position": "PG",
+    "percentOwned": null,
+    "status": null,
+    "ownershipType": null,
+    "acquisitionState": null
+   }
+  ]
+ }
+}

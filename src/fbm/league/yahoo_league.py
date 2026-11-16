@@ -156,6 +156,8 @@ def matchup_dict(m: Matchup) -> dict[str, Any]:
 
 def fetch_ownership(client, league_key: str, limit: int, page: int = 25) -> list[YahooPlayer]:
     """Available players by actual rank, with percent owned (and its weekly delta)."""
+    if getattr(client, "is_flaim", False):  # the Flaim route (fbm.flaim.reads.FlaimLeague)
+        return client.available(league_key, limit)
     out: list[YahooPlayer] = []
     start = 0
     while start < limit:
@@ -190,16 +192,22 @@ def build_snapshot(client, cfg: LeagueConfig, mapper: IdMapper, day: date, waive
 def refresh(day: date | None = None) -> tuple[LeagueState, list[Match]]:
     """Read the league from Yahoo and save the snapshot. Returns (league, unmatched players)."""
     from fbm.config import load_league_config
+    from fbm.flaim.route import league_client, yahoo_route
     from fbm.store import db
     from fbm.timeutil import nba_today
-    from fbm.yahoo.client import YahooClient
     from fbm.yahoo.ids import espn_players_from_db, load_overrides, save_matches
 
     cfg = load_league_config()
     conn = db.connect()
     mapper = IdMapper(espn_players_from_db(conn), load_overrides())
-    with YahooClient() as client:
-        league, summary, matches = build_snapshot(client, cfg, mapper, day or nba_today())
+    route = yahoo_route()
+    if route == "flaim":  # Flaim's JSON reads, assembled the same way (fbm.flaim.league)
+        from fbm.flaim.league import read_snapshot
+
+        league, summary, matches = read_snapshot(cfg, mapper, day or nba_today(), conn)
+    else:
+        with league_client(route) as client:
+            league, summary, matches = build_snapshot(client, cfg, mapper, day or nba_today())
     save_matches(conn, matches)
     save_league(league, SNAPSHOT_PATH)
     try:  # percent-owned history for trends (additive; never fail a snapshot over it)

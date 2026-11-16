@@ -1,0 +1,137 @@
+{
+ "success": true,
+ "data": {
+  "platform": "yahoo",
+  "sport": "basketball",
+  "league_id": "466.l.4242",
+  "season_year": 2026,
+  "window": {
+   "mode": "recent_30_days_timestamp",
+   "weeks": []
+  },
+  "count": 4,
+  "transactions": [
+   {
+    "transaction_id": "466.l.4242.tr.140",
+    "timestamp": 1794929400000,
+    "date": "2026-11-17",
+    "type": "add",
+    "status": "complete",
+    "week": null,
+    "team_ids": [
+     "466.l.4242.t.1"
+    ],
+    "players_added": [
+     {
+      "id": "6013",
+      "name": "Keegan Murray",
+      "position": "SF,PF",
+      "team": "SAC"
+     }
+    ],
+    "players_dropped": [
+     {
+      "id": "6201",
+      "name": "Kelly Oubre Jr.",
+      "position": "SG,SF",
+      "team": "PHI"
+     }
+    ],
+    "faab_bid": null,
+    "waiver_priority": null
+   },
+   {
+    "transaction_id": "466.l.4242.tr.139",
+    "timestamp": 1794819900000,
+    "date": "2026-11-16",
+    "type": "add",
+    "status": "complete",
+    "week": null,
+    "team_ids": [
+     "466.l.4242.t.2"
+    ],
+    "players_added": [
+     {
+      "id": "7013",
+      "name": "Coby White",
+      "position": "PG,SG",
+      "team": "CHI"
+     }
+    ],
+    "players_dropped": [],
+    "faab_bid": null,
+    "waiver_priority": 4
+   },
+   {
+    "transaction_id": "466.l.4242.tr.138",
+    "timestamp": 1794686400000,
+    "date": "2026-11-14",
+    "type": "trade",
+    "status": "complete",
+    "week": null,
+    "team_ids": [
+     "466.l.4242.t.3",
+     "466.l.4242.t.4"
+    ],
+    "players_added": [],
+    "players_dropped": [],
+    "trade_sides": [
+     {
+      "team_id": "466.l.4242.t.3",
+      "acquired": [
+       {
+        "id": "6301",
+        "name": "Alperen Sengun",
+        "team": "HOU"
+       }
+      ],
+      "gave_up": [
+       {
+        "id": "6302",
+        "name": "Zion Williamson",
+        "team": "NOP"
+       }
+      ]
+     },
+     {
+      "team_id": "466.l.4242.t.4",
+      "acquired": [
+       {
+        "id": "6302",
+        "name": "Zion Williamson",
+        "team": "NOP"
+       }
+      ],
+      "gave_up": [
+       {
+        "id": "6301",
+        "name": "Alperen Sengun",
+        "team": "HOU"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "transaction_id": "466.l.4242.tr.137",
+    "timestamp": 1794484800000,
+    "date": "2026-11-12",
+    "type": "drop",
+    "status": "complete",
+    "week": null,
+    "team_ids": [
+     "466.l.4242.t.5"
+    ],
+    "players_added": [],
+    "players_dropped": [
+     {
+      "id": "6401",
+      "name": "Andrew Wiggins",
+      "team": "MIA"
+     }
+    ]
+   }
+  ],
+  "dropped_invalid_timestamp_count": 0
+ }
+}

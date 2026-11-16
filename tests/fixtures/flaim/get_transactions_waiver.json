@@ -1,0 +1,39 @@
+{
+ "success": true,
+ "data": {
+  "platform": "yahoo",
+  "league_id": "466.l.4242",
+  "window": {
+   "mode": "pending"
+  },
+  "count": 1,
+  "transactions": [
+   {
+    "transaction_id": "466.l.4242.w.c.5_6101",
+    "type": "waiver",
+    "status": "pending",
+    "week": null,
+    "team_ids": [
+     "466.l.4242.t.1"
+    ],
+    "players_added": [
+     {
+      "id": "6101",
+      "name": "Bennedict Mathurin",
+      "team": "IND"
+     }
+    ],
+    "players_dropped": [
+     {
+      "id": "6012",
+      "name": "Naz Reid",
+      "team": "MIN"
+     }
+    ],
+    "faab_bid": null,
+    "waiver_priority": 9
+   }
+  ],
+  "dropped_invalid_timestamp_count": 0
+ }
+}

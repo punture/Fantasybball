@@ -1,0 +1,252 @@
+{
+ "success": true,
+ "data": {
+  "teamKey": "999.l.12345.t.5",
+  "teamName": "Team 5",
+  "ownerName": "Owner 5",
+  "snapshot": {
+   "type": "current"
+  },
+  "players": [
+   {
+    "playerKey": "478.p.4840",
+    "playerId": "4840",
+    "name": "Kyrie Irving",
+    "team": "DAL",
+    "position": "PG,SG",
+    "selectedPosition": "PG",
+    "status": "O",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "eligiblePositions": [
+     "PG",
+     "SG",
+     "G",
+     "Util",
+     "IL"
+    ]
+   },
+   {
+    "playerKey": "478.p.5842",
+    "playerId": "5842",
+    "name": "Derrick White",
+    "team": "BOS",
+    "position": "PG,SG",
+    "selectedPosition": "SG",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "eligiblePositions": [
+     "PG",
+     "SG",
+     "G",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.6044",
+    "playerId": "6044",
+    "name": "Jalen Brunson",
+    "team": "NYK",
+    "position": "PG",
+    "selectedPosition": "G",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": true,
+    "eligiblePositions": [
+     "PG",
+     "G",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.6021",
+    "playerId": "6021",
+    "name": "Mikal Bridges",
+    "team": "NYK",
+    "position": "SF,PF",
+    "selectedPosition": "SF",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "eligiblePositions": [
+     "SF",
+     "PF",
+     "F",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.4725",
+    "playerId": "4725",
+    "name": "Paul George",
+    "team": "BOS",
+    "position": "SF,PF",
+    "selectedPosition": "PF",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "eligiblePositions": [
+     "SF",
+     "PF",
+     "F",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.5642",
+    "playerId": "5642",
+    "name": "Domantas Sabonis",
+    "team": "SAC",
+    "position": "PF,C",
+    "selectedPosition": "F",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "eligiblePositions": [
+     "PF",
+     "F",
+     "C",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.10579",
+    "playerId": "10579",
+    "name": "Aday Mara",
+    "team": "OKC",
+    "position": "C",
+    "selectedPosition": "C",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "eligiblePositions": [
+     "C",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.5294",
+    "playerId": "5294",
+    "name": "Joel Embiid",
+    "team": "PHI",
+    "position": "C",
+    "selectedPosition": "C",
+    "status": "Q",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "eligiblePositions": [
+     "C",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.5767",
+    "playerId": "5767",
+    "name": "De'Aaron Fox",
+    "team": "SAS",
+    "position": "PG",
+    "selectedPosition": "Util",
+    "status": "O",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "eligiblePositions": [
+     "PG",
+     "G",
+     "Util",
+     "IL"
+    ]
+   },
+   {
+    "playerKey": "478.p.6402",
+    "playerId": "6402",
+    "name": "Jalen Smith",
+    "team": "CHI",
+    "position": "PF,C",
+    "selectedPosition": "Util",
+    "status": "Q",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "eligiblePositions": [
+     "PF",
+     "F",
+     "C",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.10094",
+    "playerId": "10094",
+    "name": "Victor Wembanyama",
+    "team": "SAS",
+    "position": "C",
+    "selectedPosition": "BN",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": true,
+    "eligiblePositions": [
+     "C",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.5727",
+    "playerId": "5727",
+    "name": "Fred VanVleet",
+    "team": "HOU",
+    "position": "PG",
+    "selectedPosition": "IL",
+    "status": "O",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "eligiblePositions": [
+     "PG",
+     "G",
+     "Util",
+     "IL"
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,69 @@
+{
+ "success": true,
+ "currentDate": "2026-11-18T19:00:00.000Z",
+ "currentSeasons": {
+  "football": {
+   "year": 2026,
+   "label": "2026"
+  },
+  "baseball": {
+   "year": 2026,
+   "label": "2026"
+  },
+  "basketball": {
+   "year": 2026,
+   "label": "2026-27"
+  },
+  "hockey": {
+   "year": 2026,
+   "label": "2026-27"
+  }
+ },
+ "timezone": "America/New_York",
+ "totalLeaguesFound": 3,
+ "leaguesBySport": {
+  "basketball": 2,
+  "football": 1
+ },
+ "defaultSport": "basketball",
+ "defaultLeague": {
+  "platform": "yahoo",
+  "leagueId": "466.l.4242",
+  "sport": "basketball",
+  "teamId": "1",
+  "seasonYear": 2026,
+  "leagueName": "Hardwood Classic",
+  "teamName": "Glass Cleaners"
+ },
+ "defaultLeagues": {},
+ "allLeagues": [
+  {
+   "leagueId": "466.l.4242",
+   "sport": "basketball",
+   "platform": "yahoo",
+   "teamId": "1",
+   "seasonYear": 2026,
+   "leagueName": "Hardwood Classic",
+   "teamName": "Glass Cleaners"
+  },
+  {
+   "leagueId": "1234567",
+   "sport": "basketball",
+   "platform": "espn",
+   "teamId": "4",
+   "seasonYear": 2026,
+   "leagueName": "Office League",
+   "teamName": "Dunkers"
+  },
+  {
+   "leagueId": "461.l.999",
+   "sport": "football",
+   "platform": "yahoo",
+   "teamId": "2",
+   "seasonYear": 2026,
+   "leagueName": "Sunday Funday",
+   "teamName": "Blitz"
+  }
+ ],
+ "instructions": "Use league IDs from this session for later tool calls."
+}

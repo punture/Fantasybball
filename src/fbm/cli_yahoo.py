@@ -325,19 +325,24 @@ def yahoo_logout() -> None:
 @yahoo_app.command("status")
 def yahoo_status() -> None:
     """Which Yahoo access route FBM uses (never prints secrets)."""
+    from fbm.flaim.route import is_flaim
     from fbm.yahoo import session as ws
 
     s = ws.load()
     has_api = bool(credentials.get(credentials.YAHOO_REFRESH_TOKEN))
+    flaim = is_flaim()
+    head = "Also saved (unused while Flaim is the route)" if flaim else "Active route"
+    if flaim:
+        console.print('Active route: [bold]Flaim[/] (\\[yahoo] route = "flaim"; details: `fbm flaim status`).')
     if s:
         age = s.age_days(datetime.now(UTC))
         console.print(
-            f"Active route: [bold]Yahoo web session[/] (saved {age:.1f} days ago via {s.source}; "
+            f"{head}: [bold]Yahoo web session[/] (saved {age:.1f} days ago via {s.source}; "
             f"{len(s.cookies)} cookies; host {ws.SESSION_HOST}, read-only)."
         )
     elif has_api:
-        console.print("Active route: [bold]official Yahoo API[/] (OAuth app from `fbm auth`).")
-    else:
+        console.print(f"{head}: [bold]official Yahoo API[/] (OAuth app from `fbm auth`).")
+    elif not flaim:
         console.print("[yellow]No Yahoo access yet.[/] Run `fbm yahoo login` (web session) or `fbm auth` (API).")
     console.print(f"Official API credentials: {'[green]set[/]' if has_api else 'missing'}")
 
@@ -351,7 +356,10 @@ def yahoo_check(
     from fbm.yahoo import session as ws
 
     if ws.load() is None and not credentials.get(credentials.YAHOO_REFRESH_TOKEN):
-        _fail("No Yahoo access configured: run `fbm yahoo login` (web session) or `fbm auth` (official API).")
+        _fail(
+            "No Yahoo access configured: run `fbm yahoo login` (web session) or `fbm auth` (official API). "
+            "For the Flaim route, `fbm flaim check`."
+        )
     try:
         cfg = load_league_config()
         league_key, team_key = cfg.league_key, cfg.team_key

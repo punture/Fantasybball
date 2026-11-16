@@ -1,0 +1,327 @@
+{
+ "success": true,
+ "data": {
+  "teamKey": "999.l.12345.t.8",
+  "teamName": "My Team",
+  "ownerName": "Me",
+  "snapshot": {
+   "type": "current"
+  },
+  "players": [
+   {
+    "playerKey": "478.p.6516",
+    "playerId": "6516",
+    "name": "Jalen Suggs",
+    "team": "ORL",
+    "position": "PG,SG",
+    "selectedPosition": "PG",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "isEditable": true,
+    "eligiblePositions": [
+     "PG",
+     "SG",
+     "G",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.6401",
+    "playerId": "6401",
+    "name": "Deni Avdija",
+    "team": "POR",
+    "position": "SG,SF,PF",
+    "selectedPosition": "SG",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "isEditable": true,
+    "eligiblePositions": [
+     "SG",
+     "G",
+     "SF",
+     "PF",
+     "F",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.6422",
+    "playerId": "6422",
+    "name": "Desmond Bane",
+    "team": "ORL",
+    "position": "SG,SF",
+    "selectedPosition": "G",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "isEditable": true,
+    "eligiblePositions": [
+     "SG",
+     "G",
+     "SF",
+     "F",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.6420",
+    "playerId": "6420",
+    "name": "Jaden McDaniels",
+    "team": "MIN",
+    "position": "SF",
+    "selectedPosition": "SF",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "isEditable": true,
+    "eligiblePositions": [
+     "SF",
+     "F",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.10065",
+    "playerId": "10065",
+    "name": "Toumani Camara",
+    "team": "POR",
+    "position": "SF,PF",
+    "selectedPosition": "PF",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "isEditable": true,
+    "eligiblePositions": [
+     "SF",
+     "PF",
+     "F",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.10265",
+    "playerId": "10265",
+    "name": "Matas Buzelis",
+    "team": "CHI",
+    "position": "SF,PF",
+    "selectedPosition": "F",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "isEditable": true,
+    "eligiblePositions": [
+     "SF",
+     "PF",
+     "F",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.5352",
+    "playerId": "5352",
+    "name": "Nikola Jokić",
+    "team": "DEN",
+    "position": "C",
+    "selectedPosition": "C",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": true,
+    "isEditable": true,
+    "eligiblePositions": [
+     "C",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.6038",
+    "playerId": "6038",
+    "name": "Robert Williams III",
+    "team": "POR",
+    "position": "C",
+    "selectedPosition": "C",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "isEditable": true,
+    "eligiblePositions": [
+     "C",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.10571",
+    "playerId": "10571",
+    "name": "Yaxel Lendeborg",
+    "team": "GSW",
+    "position": "SF,PF",
+    "selectedPosition": "Util",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "isEditable": true,
+    "eligiblePositions": [
+     "SF",
+     "PF",
+     "F",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.6411",
+    "playerId": "6411",
+    "name": "Saddiq Bey",
+    "team": "NOP",
+    "position": "SF,PF",
+    "selectedPosition": "Util",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "isEditable": true,
+    "eligiblePositions": [
+     "SF",
+     "PF",
+     "F",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.5856",
+    "playerId": "5856",
+    "name": "Isaiah Hartenstein",
+    "team": "OKC",
+    "position": "C",
+    "selectedPosition": "BN",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "isEditable": true,
+    "eligiblePositions": [
+     "C",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.6417",
+    "playerId": "6417",
+    "name": "Immanuel Quickley",
+    "team": "TOR",
+    "position": "PG,SG",
+    "selectedPosition": "BN",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "isEditable": true,
+    "eligiblePositions": [
+     "PG",
+     "SG",
+     "G",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.5836",
+    "playerId": "5836",
+    "name": "OG Anunoby",
+    "team": "NYK",
+    "position": "SF,PF",
+    "selectedPosition": "BN",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": false,
+    "isEditable": true,
+    "eligiblePositions": [
+     "SF",
+     "PF",
+     "F",
+     "Util"
+    ]
+   },
+   {
+    "playerKey": "478.p.6692",
+    "playerId": "6692",
+    "name": "Chet Holmgren",
+    "team": "OKC",
+    "position": "PF,C",
+    "selectedPosition": "IL",
+    "status": "O",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": true,
+    "isEditable": true,
+    "eligiblePositions": [
+     "PF",
+     "F",
+     "C",
+     "Util",
+     "IL"
+    ]
+   },
+   {
+    "playerKey": "478.p.4612",
+    "playerId": "4612",
+    "name": "Stephen Curry",
+    "team": "GSW",
+    "position": "PG",
+    "selectedPosition": "IL",
+    "status": "O",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "isUndroppable": true,
+    "isEditable": true,
+    "eligiblePositions": [
+     "PG",
+     "G",
+     "Util",
+     "IL"
+    ]
+   }
+  ]
+ }
+}

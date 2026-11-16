@@ -1,0 +1,143 @@
+{
+ "success": true,
+ "data": {
+  "leagueKey": "999.l.12345",
+  "leagueId": "12345",
+  "name": "Test League",
+  "url": "https://basketball.fantasysports.yahoo.com/nba/12345",
+  "numTeams": 10,
+  "scoringType": "head",
+  "scoringFormat": "categories",
+  "currentWeek": 5,
+  "startWeek": "1",
+  "endWeek": "22",
+  "isFinished": false,
+  "draftStatus": "postdraft",
+  "draftType": "live",
+  "isAuctionDraft": false,
+  "tradeEndDate": "2027-03-04",
+  "tradeRatifyType": "vote",
+  "tradeRejectTime": 2,
+  "usesFaab": false,
+  "waiverType": "R",
+  "waiverRule": "all",
+  "waiverTime": 1,
+  "postDraftPlayers": "W",
+  "cantCutList": "yahoo",
+  "maxWeeklyAdds": 4,
+  "rosterPositions": [
+   {
+    "position": "PG",
+    "count": 1,
+    "positionType": "P"
+   },
+   {
+    "position": "SG",
+    "count": 1,
+    "positionType": "P"
+   },
+   {
+    "position": "G",
+    "count": 1,
+    "positionType": "P"
+   },
+   {
+    "position": "SF",
+    "count": 1,
+    "positionType": "P"
+   },
+   {
+    "position": "PF",
+    "count": 1,
+    "positionType": "P"
+   },
+   {
+    "position": "F",
+    "count": 1,
+    "positionType": "P"
+   },
+   {
+    "position": "C",
+    "count": 2,
+    "positionType": "P"
+   },
+   {
+    "position": "Util",
+    "count": 2,
+    "positionType": "P"
+   },
+   {
+    "position": "BN",
+    "count": 3
+   },
+   {
+    "position": "IL",
+    "count": 5
+   }
+  ],
+  "isProLeague": false,
+  "weeklyDeadline": "intraday",
+  "teams": [
+   {
+    "teamKey": "999.l.12345.t.1",
+    "teamId": "1",
+    "teamName": "Team 1",
+    "ownerName": "Owner 1"
+   },
+   {
+    "teamKey": "999.l.12345.t.2",
+    "teamId": "2",
+    "teamName": "Team 2",
+    "ownerName": "Owner 2"
+   },
+   {
+    "teamKey": "999.l.12345.t.3",
+    "teamId": "3",
+    "teamName": "Team 3",
+    "ownerName": "Owner 3"
+   },
+   {
+    "teamKey": "999.l.12345.t.4",
+    "teamId": "4",
+    "teamName": "Team 4",
+    "ownerName": "Owner 4"
+   },
+   {
+    "teamKey": "999.l.12345.t.5",
+    "teamId": "5",
+    "teamName": "Team 5",
+    "ownerName": "Owner 5"
+   },
+   {
+    "teamKey": "999.l.12345.t.6",
+    "teamId": "6",
+    "teamName": "Team 6",
+    "ownerName": "Owner 6"
+   },
+   {
+    "teamKey": "999.l.12345.t.7",
+    "teamId": "7",
+    "teamName": "Team 7",
+    "ownerName": "Owner 7"
+   },
+   {
+    "teamKey": "999.l.12345.t.8",
+    "teamId": "8",
+    "teamName": "My Team",
+    "ownerName": "Me"
+   },
+   {
+    "teamKey": "999.l.12345.t.9",
+    "teamId": "9",
+    "teamName": "Team 9",
+    "ownerName": "Owner 9"
+   },
+   {
+    "teamKey": "999.l.12345.t.10",
+    "teamId": "10",
+    "teamName": "Team 10",
+    "ownerName": "Owner 10"
+   }
+  ]
+ }
+}

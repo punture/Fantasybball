@@ -15,6 +15,10 @@ EXAMPLE_PATH = CONFIG_DIR / "settings.example.toml"
 AGENTS = ("copilot", "claude-code", "codex", "cursor", "gemini", "generic")
 AUTOMATION_MODES = ("none", "agent-app", "scheduler", "engine-only")
 JOBS = ("data-sync", "lineup-guard", "daily-gm", "weekly-retro", "trade-scan", "health")
+# --- [yahoo] / [flaim]: how the Yahoo league is read (fbm.flaim.route) ---
+YAHOO_ROUTES = ("auto", "flaim", "session", "api")  # auto = saved web session wins, else the official API
+FLAIM_DEFAULT_URL = "https://api.flaim.app/mcp"
+# --- end [yahoo] / [flaim] ---
 
 
 @dataclass(frozen=True)
@@ -37,6 +41,10 @@ class Settings:
     # suggestion tool refuses to suggest while HT is unhealthy (no fallback). Off = demo/ESPN engine.
     hashtag_enabled: bool = False
     hashtag_league_id: str = ""  # HT's league id (= the Yahoo league id, e.g. "30273")
+    # --- [yahoo] / [flaim] ---
+    yahoo_route: str = "auto"  # one of YAHOO_ROUTES ([yahoo] route; env FBM_YAHOO_ROUTE overrides)
+    flaim_url: str = FLAIM_DEFAULT_URL  # Flaim's MCP endpoint ([flaim] url)
+    # --- end [yahoo] / [flaim] ---
 
 
 def load_settings(path: Path = SETTINGS_PATH) -> Settings:
@@ -67,8 +75,14 @@ def load_settings(path: Path = SETTINGS_PATH) -> Settings:
         quiet_hours=notify.get("quiet_hours", ""),
         hashtag_enabled=bool(hashtag.get("enabled", default.hashtag_enabled)),
         hashtag_league_id=str(hashtag.get("league_id", default.hashtag_league_id) or ""),
+        # --- [yahoo] / [flaim] ---
+        yahoo_route=str(raw.get("yahoo", {}).get("route", default.yahoo_route) or default.yahoo_route).lower(),
+        flaim_url=str(raw.get("flaim", {}).get("url", default.flaim_url) or default.flaim_url),
+        # --- end [yahoo] / [flaim] ---
     )
     if path == SETTINGS_PATH and os.environ.get("FBM_HASHTAG_ENABLED") in ("0", "1"):
         # Process-level override of the owner's file (the test suite forces "0"; also a manual kill switch).
         settings = replace(settings, hashtag_enabled=os.environ["FBM_HASHTAG_ENABLED"] == "1")
+    if path == SETTINGS_PATH and os.environ.get("FBM_YAHOO_ROUTE", "").strip():  # [yahoo] route, per process
+        settings = replace(settings, yahoo_route=os.environ["FBM_YAHOO_ROUTE"].strip().lower())
     return settings

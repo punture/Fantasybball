@@ -16,6 +16,7 @@ from typing import Any
 from fbm.constants import C
 
 OK, WARN, FAIL = "OK", "WARN", "FAIL"
+FLAIM_RENEW_WARN_DAYS = 2  # warn when the Flaim refresh window (7 days, renewed by every read) is this close to lapsing
 _RANK = {OK: 0, WARN: 1, FAIL: 2}
 DATA_JOBS = ("schedule", "boxscores", "injuries", "news")
 
@@ -85,11 +86,15 @@ def check_yahoo(
     refresh_error: str,
     unmatched_count: int,
     web_session_age_days: float | None = None,
+    flaim: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
-    """`web_session_age_days` is set when a Yahoo web session (`fbm yahoo login`) is saved: it is then the route."""
+    """`web_session_age_days` is set when a Yahoo web session (`fbm yahoo login`) is saved: it is then the route.
+    `flaim` (the sign-in summary, fbm.flaim.oauth) is set when `[yahoo] route = "flaim"`: Flaim is then the route."""
     out = []
     missing = [k for k, v in creds.items() if not v]
-    if web_session_age_days is not None:
+    if flaim is not None:
+        out.append(_flaim_access(flaim))
+    elif web_session_age_days is not None:
         out.append(
             result(
                 "Yahoo access",
@@ -114,17 +119,30 @@ def check_yahoo(
             "League configured",
             OK if league_configured else (FAIL if source == "yahoo" else WARN),
             "config/league.toml present" if league_configured else "config/league.toml missing",
-            "" if league_configured else "`fbm yahoo login` (or `fbm auth --reset`), then `fbm league select`.",
+            ""
+            if league_configured
+            else (
+                "`fbm flaim leagues --select`."
+                if flaim is not None
+                else "`fbm yahoo login` (or `fbm auth --reset`), then `fbm league select`."
+            ),
         )
     )
     if source != "yahoo":
         ready = web_session_age_days is not None
+        if flaim is not None:
+            state = (
+                "Flaim sign-in ready" if flaim.get("signed_in") else "Flaim route, not signed in (`fbm flaim login`)"
+            )
+        elif ready:
+            state = "Yahoo web session ready"
+        else:
+            state = "Yahoo API approval pending (or use `fbm yahoo login`)"
         out.append(
             result(
                 "League source",
                 WARN,
-                f"source={source}: "
-                + ("Yahoo web session ready" if ready else "Yahoo API approval pending (or use `fbm yahoo login`)"),
+                f"source={source}: {state}",
                 'Switch with `fbm setup --league-source yahoo --yes` (sets [league] source = "yahoo").',
             )
         )
@@ -153,7 +171,9 @@ def check_yahoo(
                 "Yahoo refresh",
                 FAIL,
                 f"last refresh failed: {refresh_error[:200]}",
-                "Web session: `fbm yahoo login`. API app: `fbm auth --reset`. Then `fbm yahoo check`.",
+                "Flaim: `fbm flaim login`, then `fbm flaim check`."
+                if flaim is not None
+                else "Web session: `fbm yahoo login`. API app: `fbm auth --reset`. Then `fbm yahoo check`.",
             )
         )
     else:
@@ -344,6 +364,34 @@ def _cred_presence() -> dict[str, bool]:
     return {n: credentials.get(n) is not None for n in names}
 
 
+def _flaim_access(flaim: dict[str, Any]) -> dict[str, str]:
+    days = flaim.get("refresh_days_left")
+    if not flaim.get("signed_in"):
+        return result("Yahoo access", FAIL, "Flaim route, not signed in (or the sign-in lapsed)", "`fbm flaim login`")
+    if days is not None and days < FLAIM_RENEW_WARN_DAYS:
+        return result(
+            "Yahoo access",
+            WARN,
+            f"Flaim sign-in lapses in {days:.1f} days unless FBM reads the league before then",
+            "Run `fbm snapshot` (any Flaim read renews it), or `fbm flaim login`.",
+        )
+    return result("Yahoo access", OK, "Flaim (read-only)" + (f"; sign-in renews, {days:.1f} days left" if days else ""))
+
+
+def _flaim_status() -> dict[str, Any] | None:
+    """The Flaim sign-in summary when Flaim is the route, else None (never secrets)."""
+    from fbm.flaim import oauth
+    from fbm.flaim.route import is_flaim
+
+    if not is_flaim():
+        return None
+    try:
+        state = oauth.load()
+    except Exception:  # noqa: BLE001 - an unreadable credential store reads as signed out
+        state = None
+    return state.summary() if state else {"signed_in": False}
+
+
 def _web_session_age_days(now: datetime) -> float | None:
     from fbm.yahoo import session as web_session
 
@@ -478,6 +526,7 @@ def gather(
         yahoo_league.last_refresh_error(),
         unmatched,
         _web_session_age_days(now),
+        _flaim_status(),
     )
     checks += check_proposals(prop_rows, now)
     lookback = C("health.journal_lookback_days")

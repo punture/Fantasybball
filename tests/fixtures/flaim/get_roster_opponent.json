@@ -1,0 +1,232 @@
+{
+ "success": true,
+ "data": {
+  "leagueId": "466.l.4242",
+  "teamId": "2",
+  "teamKey": "466.l.4242.t.2",
+  "teamName": "Bench Mob",
+  "ownerName": "Rival",
+  "snapshot": {
+   "type": "current"
+  },
+  "players": [
+   {
+    "playerKey": "466.p.7001",
+    "playerId": "7001",
+    "name": "Luka Doncic",
+    "team": "LAL",
+    "position": "PG,SG",
+    "selectedPosition": "PG",
+    "status": null,
+    "eligiblePositions": [
+     "PG",
+     "SG",
+     "G",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.7002",
+    "playerId": "7002",
+    "name": "Anthony Edwards",
+    "team": "MIN",
+    "position": "SG,SF",
+    "selectedPosition": "SG",
+    "status": null,
+    "eligiblePositions": [
+     "SG",
+     "SF",
+     "G",
+     "F",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.7003",
+    "playerId": "7003",
+    "name": "Trae Young",
+    "team": "ATL",
+    "position": "PG",
+    "selectedPosition": "G",
+    "status": null,
+    "eligiblePositions": [
+     "PG",
+     "G",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.7004",
+    "playerId": "7004",
+    "name": "Jayson Tatum",
+    "team": "BOS",
+    "position": "SF,PF",
+    "selectedPosition": "IL",
+    "status": "O",
+    "eligiblePositions": [
+     "SF",
+     "PF",
+     "F",
+     "Util",
+     "IL"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.7005",
+    "playerId": "7005",
+    "name": "Giannis Antetokounmpo",
+    "team": "MIL",
+    "position": "PF,C",
+    "selectedPosition": "PF",
+    "status": null,
+    "eligiblePositions": [
+     "PF",
+     "C",
+     "F",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.7006",
+    "playerId": "7006",
+    "name": "Paolo Banchero",
+    "team": "ORL",
+    "position": "SF,PF",
+    "selectedPosition": "F",
+    "status": null,
+    "eligiblePositions": [
+     "SF",
+     "PF",
+     "F",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.7007",
+    "playerId": "7007",
+    "name": "Nikola Jokic",
+    "team": "DEN",
+    "position": "C",
+    "selectedPosition": "C",
+    "status": null,
+    "eligiblePositions": [
+     "C",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.7008",
+    "playerId": "7008",
+    "name": "Victor Wembanyama",
+    "team": "SA",
+    "position": "PF,C",
+    "selectedPosition": "C",
+    "status": null,
+    "eligiblePositions": [
+     "PF",
+     "C",
+     "F",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.7009",
+    "playerId": "7009",
+    "name": "Franz Wagner",
+    "team": "ORL",
+    "position": "SF,PF",
+    "selectedPosition": "SF",
+    "status": null,
+    "eligiblePositions": [
+     "SF",
+     "PF",
+     "F",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.7010",
+    "playerId": "7010",
+    "name": "De'Aaron Fox",
+    "team": "SA",
+    "position": "PG",
+    "selectedPosition": "Util",
+    "status": null,
+    "eligiblePositions": [
+     "PG",
+     "G",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.7011",
+    "playerId": "7011",
+    "name": "Josh Giddey",
+    "team": "CHI",
+    "position": "PG,SG",
+    "selectedPosition": "Util",
+    "status": null,
+    "eligiblePositions": [
+     "PG",
+     "SG",
+     "G",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.7012",
+    "playerId": "7012",
+    "name": "Walker Kessler",
+    "team": "UTA",
+    "position": "C",
+    "selectedPosition": "BN",
+    "status": null,
+    "eligiblePositions": [
+     "C",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.7013",
+    "playerId": "7013",
+    "name": "Coby White",
+    "team": "CHI",
+    "position": "PG,SG",
+    "selectedPosition": "BN",
+    "status": "DTD",
+    "eligiblePositions": [
+     "PG",
+     "SG",
+     "G",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   }
+  ]
+ }
+}

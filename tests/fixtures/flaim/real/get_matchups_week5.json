@@ -1,0 +1,1074 @@
+{
+ "success": true,
+ "data": {
+  "leagueKey": "999.l.12345",
+  "leagueName": "Test League",
+  "currentWeek": 5,
+  "matchupWeek": 5,
+  "scoringType": "categories",
+  "scoringTypeRaw": "head",
+  "categoryNamesAvailable": true,
+  "matchups": [
+   {
+    "matchupId": 1,
+    "week": 5,
+    "status": "in_progress",
+    "home": {
+     "teamKey": "999.l.12345.t.1",
+     "teamId": "1",
+     "teamName": "Team 1",
+     "points": 0,
+     "gamesRemaining": 44,
+     "categories": [
+      {
+       "statId": "9004003",
+       "name": "Field Goals Made / Field Goals Attempted",
+       "displayName": "FGM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "5",
+       "name": "Field Goal Percentage",
+       "displayName": "FG%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "9007006",
+       "name": "Free Throws Made / Free Throws Attempted",
+       "displayName": "FTM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "8",
+       "name": "Free Throw Percentage",
+       "displayName": "FT%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "10",
+       "name": "3-point Shots Made",
+       "displayName": "3PTM",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "12",
+       "name": "Points Scored",
+       "displayName": "PTS",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "15",
+       "name": "Total Rebounds",
+       "displayName": "REB",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "16",
+       "name": "Assists",
+       "displayName": "AST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "17",
+       "name": "Steals",
+       "displayName": "ST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "18",
+       "name": "Blocked Shots",
+       "displayName": "BLK",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "19",
+       "name": "Turnovers",
+       "displayName": "TO",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      }
+     ],
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categoriesWon": 0
+    },
+    "away": {
+     "teamKey": "999.l.12345.t.6",
+     "teamId": "6",
+     "teamName": "Team 6",
+     "points": 0,
+     "gamesRemaining": 44,
+     "categories": [
+      {
+       "statId": "9004003",
+       "name": "Field Goals Made / Field Goals Attempted",
+       "displayName": "FGM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "5",
+       "name": "Field Goal Percentage",
+       "displayName": "FG%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "9007006",
+       "name": "Free Throws Made / Free Throws Attempted",
+       "displayName": "FTM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "8",
+       "name": "Free Throw Percentage",
+       "displayName": "FT%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "10",
+       "name": "3-point Shots Made",
+       "displayName": "3PTM",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "12",
+       "name": "Points Scored",
+       "displayName": "PTS",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "15",
+       "name": "Total Rebounds",
+       "displayName": "REB",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "16",
+       "name": "Assists",
+       "displayName": "AST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "17",
+       "name": "Steals",
+       "displayName": "ST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "18",
+       "name": "Blocked Shots",
+       "displayName": "BLK",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "19",
+       "name": "Turnovers",
+       "displayName": "TO",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      }
+     ],
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categoriesWon": 0
+    },
+    "statWinnersAvailable": true
+   },
+   {
+    "matchupId": 2,
+    "week": 5,
+    "status": "in_progress",
+    "home": {
+     "teamKey": "999.l.12345.t.2",
+     "teamId": "2",
+     "teamName": "Team 2",
+     "points": 0,
+     "gamesRemaining": 45,
+     "categories": [
+      {
+       "statId": "9004003",
+       "name": "Field Goals Made / Field Goals Attempted",
+       "displayName": "FGM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "5",
+       "name": "Field Goal Percentage",
+       "displayName": "FG%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "9007006",
+       "name": "Free Throws Made / Free Throws Attempted",
+       "displayName": "FTM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "8",
+       "name": "Free Throw Percentage",
+       "displayName": "FT%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "10",
+       "name": "3-point Shots Made",
+       "displayName": "3PTM",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "12",
+       "name": "Points Scored",
+       "displayName": "PTS",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "15",
+       "name": "Total Rebounds",
+       "displayName": "REB",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "16",
+       "name": "Assists",
+       "displayName": "AST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "17",
+       "name": "Steals",
+       "displayName": "ST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "18",
+       "name": "Blocked Shots",
+       "displayName": "BLK",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "19",
+       "name": "Turnovers",
+       "displayName": "TO",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      }
+     ],
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categoriesWon": 0
+    },
+    "away": {
+     "teamKey": "999.l.12345.t.10",
+     "teamId": "10",
+     "teamName": "Team 10",
+     "points": 0,
+     "gamesRemaining": 39,
+     "categories": [
+      {
+       "statId": "9004003",
+       "name": "Field Goals Made / Field Goals Attempted",
+       "displayName": "FGM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "5",
+       "name": "Field Goal Percentage",
+       "displayName": "FG%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "9007006",
+       "name": "Free Throws Made / Free Throws Attempted",
+       "displayName": "FTM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "8",
+       "name": "Free Throw Percentage",
+       "displayName": "FT%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "10",
+       "name": "3-point Shots Made",
+       "displayName": "3PTM",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "12",
+       "name": "Points Scored",
+       "displayName": "PTS",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "15",
+       "name": "Total Rebounds",
+       "displayName": "REB",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "16",
+       "name": "Assists",
+       "displayName": "AST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "17",
+       "name": "Steals",
+       "displayName": "ST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "18",
+       "name": "Blocked Shots",
+       "displayName": "BLK",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "19",
+       "name": "Turnovers",
+       "displayName": "TO",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      }
+     ],
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categoriesWon": 0
+    },
+    "statWinnersAvailable": true
+   },
+   {
+    "matchupId": 3,
+    "week": 5,
+    "status": "in_progress",
+    "home": {
+     "teamKey": "999.l.12345.t.3",
+     "teamId": "3",
+     "teamName": "Team 3",
+     "points": 0,
+     "gamesRemaining": 40,
+     "categories": [
+      {
+       "statId": "9004003",
+       "name": "Field Goals Made / Field Goals Attempted",
+       "displayName": "FGM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "5",
+       "name": "Field Goal Percentage",
+       "displayName": "FG%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "9007006",
+       "name": "Free Throws Made / Free Throws Attempted",
+       "displayName": "FTM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "8",
+       "name": "Free Throw Percentage",
+       "displayName": "FT%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "10",
+       "name": "3-point Shots Made",
+       "displayName": "3PTM",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "12",
+       "name": "Points Scored",
+       "displayName": "PTS",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "15",
+       "name": "Total Rebounds",
+       "displayName": "REB",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "16",
+       "name": "Assists",
+       "displayName": "AST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "17",
+       "name": "Steals",
+       "displayName": "ST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "18",
+       "name": "Blocked Shots",
+       "displayName": "BLK",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "19",
+       "name": "Turnovers",
+       "displayName": "TO",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      }
+     ],
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categoriesWon": 0
+    },
+    "away": {
+     "teamKey": "999.l.12345.t.9",
+     "teamId": "9",
+     "teamName": "Team 9",
+     "points": 0,
+     "gamesRemaining": 44,
+     "categories": [
+      {
+       "statId": "9004003",
+       "name": "Field Goals Made / Field Goals Attempted",
+       "displayName": "FGM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "5",
+       "name": "Field Goal Percentage",
+       "displayName": "FG%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "9007006",
+       "name": "Free Throws Made / Free Throws Attempted",
+       "displayName": "FTM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "8",
+       "name": "Free Throw Percentage",
+       "displayName": "FT%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "10",
+       "name": "3-point Shots Made",
+       "displayName": "3PTM",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "12",
+       "name": "Points Scored",
+       "displayName": "PTS",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "15",
+       "name": "Total Rebounds",
+       "displayName": "REB",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "16",
+       "name": "Assists",
+       "displayName": "AST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "17",
+       "name": "Steals",
+       "displayName": "ST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "18",
+       "name": "Blocked Shots",
+       "displayName": "BLK",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "19",
+       "name": "Turnovers",
+       "displayName": "TO",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      }
+     ],
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categoriesWon": 0
+    },
+    "statWinnersAvailable": true
+   },
+   {
+    "matchupId": 4,
+    "week": 5,
+    "status": "in_progress",
+    "home": {
+     "teamKey": "999.l.12345.t.4",
+     "teamId": "4",
+     "teamName": "Team 4",
+     "points": 0,
+     "gamesRemaining": 30,
+     "categories": [
+      {
+       "statId": "9004003",
+       "name": "Field Goals Made / Field Goals Attempted",
+       "displayName": "FGM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "5",
+       "name": "Field Goal Percentage",
+       "displayName": "FG%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "9007006",
+       "name": "Free Throws Made / Free Throws Attempted",
+       "displayName": "FTM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "8",
+       "name": "Free Throw Percentage",
+       "displayName": "FT%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "10",
+       "name": "3-point Shots Made",
+       "displayName": "3PTM",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "12",
+       "name": "Points Scored",
+       "displayName": "PTS",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "15",
+       "name": "Total Rebounds",
+       "displayName": "REB",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "16",
+       "name": "Assists",
+       "displayName": "AST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "17",
+       "name": "Steals",
+       "displayName": "ST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "18",
+       "name": "Blocked Shots",
+       "displayName": "BLK",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "19",
+       "name": "Turnovers",
+       "displayName": "TO",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      }
+     ],
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categoriesWon": 0
+    },
+    "away": {
+     "teamKey": "999.l.12345.t.7",
+     "teamId": "7",
+     "teamName": "Team 7",
+     "points": 0,
+     "gamesRemaining": 38,
+     "categories": [
+      {
+       "statId": "9004003",
+       "name": "Field Goals Made / Field Goals Attempted",
+       "displayName": "FGM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "5",
+       "name": "Field Goal Percentage",
+       "displayName": "FG%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "9007006",
+       "name": "Free Throws Made / Free Throws Attempted",
+       "displayName": "FTM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "8",
+       "name": "Free Throw Percentage",
+       "displayName": "FT%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "10",
+       "name": "3-point Shots Made",
+       "displayName": "3PTM",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "12",
+       "name": "Points Scored",
+       "displayName": "PTS",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "15",
+       "name": "Total Rebounds",
+       "displayName": "REB",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "16",
+       "name": "Assists",
+       "displayName": "AST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "17",
+       "name": "Steals",
+       "displayName": "ST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "18",
+       "name": "Blocked Shots",
+       "displayName": "BLK",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "19",
+       "name": "Turnovers",
+       "displayName": "TO",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      }
+     ],
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categoriesWon": 0
+    },
+    "statWinnersAvailable": true
+   },
+   {
+    "matchupId": 5,
+    "week": 5,
+    "status": "in_progress",
+    "home": {
+     "teamKey": "999.l.12345.t.5",
+     "teamId": "5",
+     "teamName": "Team 5",
+     "points": 0,
+     "gamesRemaining": 32,
+     "categories": [
+      {
+       "statId": "9004003",
+       "name": "Field Goals Made / Field Goals Attempted",
+       "displayName": "FGM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "5",
+       "name": "Field Goal Percentage",
+       "displayName": "FG%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "9007006",
+       "name": "Free Throws Made / Free Throws Attempted",
+       "displayName": "FTM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "8",
+       "name": "Free Throw Percentage",
+       "displayName": "FT%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "10",
+       "name": "3-point Shots Made",
+       "displayName": "3PTM",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "12",
+       "name": "Points Scored",
+       "displayName": "PTS",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "15",
+       "name": "Total Rebounds",
+       "displayName": "REB",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "16",
+       "name": "Assists",
+       "displayName": "AST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "17",
+       "name": "Steals",
+       "displayName": "ST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "18",
+       "name": "Blocked Shots",
+       "displayName": "BLK",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "19",
+       "name": "Turnovers",
+       "displayName": "TO",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      }
+     ],
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categoriesWon": 0
+    },
+    "away": {
+     "teamKey": "999.l.12345.t.8",
+     "teamId": "8",
+     "teamName": "My Team",
+     "points": 0,
+     "gamesRemaining": 50,
+     "categories": [
+      {
+       "statId": "9004003",
+       "name": "Field Goals Made / Field Goals Attempted",
+       "displayName": "FGM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "5",
+       "name": "Field Goal Percentage",
+       "displayName": "FG%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "9007006",
+       "name": "Free Throws Made / Free Throws Attempted",
+       "displayName": "FTM/A",
+       "value": "/",
+       "result": null,
+       "isDisplayOnly": true
+      },
+      {
+       "statId": "8",
+       "name": "Free Throw Percentage",
+       "displayName": "FT%",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "10",
+       "name": "3-point Shots Made",
+       "displayName": "3PTM",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "12",
+       "name": "Points Scored",
+       "displayName": "PTS",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "15",
+       "name": "Total Rebounds",
+       "displayName": "REB",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "16",
+       "name": "Assists",
+       "displayName": "AST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "17",
+       "name": "Steals",
+       "displayName": "ST",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "18",
+       "name": "Blocked Shots",
+       "displayName": "BLK",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      },
+      {
+       "statId": "19",
+       "name": "Turnovers",
+       "displayName": "TO",
+       "value": "",
+       "result": "tie",
+       "isDisplayOnly": false
+      }
+     ],
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categoriesWon": 0
+    },
+    "statWinnersAvailable": true
+   }
+  ]
+ }
+}

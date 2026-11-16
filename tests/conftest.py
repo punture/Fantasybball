@@ -9,6 +9,7 @@ import pytest
 def _hashtag_off_by_default(monkeypatch):
     """The owner's config/settings.toml may enable Hashtag mode; tests opt in explicitly instead."""
     monkeypatch.setenv("FBM_HASHTAG_ENABLED", "0")
+    monkeypatch.setenv("FBM_YAHOO_ROUTE", "auto")  # likewise `[yahoo] route`: Flaim tests opt in explicitly
 
 
 @pytest.fixture(autouse=True)

@@ -321,13 +321,17 @@ def league_overview() -> dict[str, Any]:
     conn = _conn()
     start, ws, we = _week_window()
     now = datetime.now().astimezone()
+    from fbm.flaim.route import is_flaim
     from fbm.yahoo import session as web_session
 
     has_session = web_session.load() is not None
     has_api = bool(credentials.get(credentials.YAHOO_REFRESH_TOKEN))
+    flaim = is_flaim()
     yahoo = {
-        "credentials": has_session or has_api,
-        "access_route": "web session (`fbm yahoo login`)" if has_session else ("official API" if has_api else None),
+        "credentials": has_session or has_api or flaim,
+        "access_route": "Flaim (`fbm flaim login`)"
+        if flaim
+        else ("web session (`fbm yahoo login`)" if has_session else ("official API" if has_api else None)),
         "league_configured": LEAGUE_CONFIG_PATH.exists(),
         "roster_changes": "you make them in Yahoo: FBM never changes your league (insights, lineup tips, proposals)",
         "status": (
@@ -3516,9 +3520,9 @@ def _yahoo_only(what: str) -> dict[str, Any] | None:
 
 
 def _yahoo_client():
-    from fbm.yahoo.client import YahooClient
+    from fbm.flaim.route import league_client  # a YahooClient, or Flaim's reader on `[yahoo] route = "flaim"`
 
-    return YahooClient()
+    return league_client()
 
 
 def _yahoo_mapper(league: LeagueState):
