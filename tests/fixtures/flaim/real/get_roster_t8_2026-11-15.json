@@ -1,0 +1,197 @@
+{
+ "success": true,
+ "data": {
+  "teamKey": "999.l.12345.t.8",
+  "teamName": "My Team",
+  "ownerName": "Me",
+  "snapshot": {
+   "type": "date",
+   "date": "2026-11-15"
+  },
+  "limitations": {
+   "playerProTeamAvailable": false
+  },
+  "players": [
+   {
+    "playerKey": "478.p.6417",
+    "playerId": "6417",
+    "name": "Immanuel Quickley",
+    "position": "PG,SG",
+    "selectedPosition": "PG",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   },
+   {
+    "playerKey": "478.p.6401",
+    "playerId": "6401",
+    "name": "Deni Avdija",
+    "position": "SG,SF,PF",
+    "selectedPosition": "SG",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   },
+   {
+    "playerKey": "478.p.6422",
+    "playerId": "6422",
+    "name": "Desmond Bane",
+    "position": "SG,SF",
+    "selectedPosition": "G",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   },
+   {
+    "playerKey": "478.p.5836",
+    "playerId": "5836",
+    "name": "OG Anunoby",
+    "position": "SF,PF",
+    "selectedPosition": "SF",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   },
+   {
+    "playerKey": "478.p.10065",
+    "playerId": "10065",
+    "name": "Toumani Camara",
+    "position": "SF,PF",
+    "selectedPosition": "PF",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   },
+   {
+    "playerKey": "478.p.10265",
+    "playerId": "10265",
+    "name": "Matas Buzelis",
+    "position": "SF,PF",
+    "selectedPosition": "F",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   },
+   {
+    "playerKey": "478.p.5352",
+    "playerId": "5352",
+    "name": "Nikola Jokić",
+    "position": "C",
+    "selectedPosition": "C",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   },
+   {
+    "playerKey": "478.p.5856",
+    "playerId": "5856",
+    "name": "Isaiah Hartenstein",
+    "position": "C",
+    "selectedPosition": "C",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   },
+   {
+    "playerKey": "478.p.10571",
+    "playerId": "10571",
+    "name": "Yaxel Lendeborg",
+    "position": "SF,PF",
+    "selectedPosition": "Util",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   },
+   {
+    "playerKey": "478.p.6619",
+    "playerId": "6619",
+    "name": "Sam Hauser",
+    "position": "SF,PF",
+    "selectedPosition": "Util",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   },
+   {
+    "playerKey": "478.p.6420",
+    "playerId": "6420",
+    "name": "Jaden McDaniels",
+    "position": "SF",
+    "selectedPosition": "BN",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   },
+   {
+    "playerKey": "478.p.6411",
+    "playerId": "6411",
+    "name": "Saddiq Bey",
+    "position": "SF,PF",
+    "selectedPosition": "BN",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   },
+   {
+    "playerKey": "478.p.6516",
+    "playerId": "6516",
+    "name": "Jalen Suggs",
+    "position": "PG,SG",
+    "selectedPosition": "BN",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   },
+   {
+    "playerKey": "478.p.6692",
+    "playerId": "6692",
+    "name": "Chet Holmgren",
+    "position": "PF,C",
+    "selectedPosition": "IL",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   },
+   {
+    "playerKey": "478.p.4612",
+    "playerId": "4612",
+    "name": "Stephen Curry",
+    "position": "PG",
+    "selectedPosition": "IL",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    }
+   }
+  ]
+ }
+}

@@ -66,7 +66,7 @@ def test_route_comes_from_settings_or_env(monkeypatch):
     monkeypatch.setenv("FBM_YAHOO_ROUTE", "flaim")
     assert route.yahoo_route() == "flaim" and route.is_flaim()
     monkeypatch.setenv("FBM_YAHOO_ROUTE", "carrier-pigeon")
-    with pytest.raises(NotConfiguredError, match="Unknown \\[yahoo\\] route"):
+    with pytest.raises(NotConfiguredError, match="Unknown Yahoo route"):
         route.yahoo_route()
     assert not route.is_flaim()
 
@@ -198,6 +198,14 @@ def test_health_reports_the_flaim_sign_in():
     assert not any(c["check"] == "Yahoo credentials" for c in out)  # no Yahoo app needed on this route
 
 
+def test_health_demo_source_names_the_flaim_route():
+    out = health.check_yahoo("demo", {}, False, True, None, "", 0, flaim={"signed_in": True})
+    source = next(c for c in out if c["check"] == "League source")
+    assert "Flaim sign-in ready" in source["detail"] and "API approval" not in source["detail"]
+    league = next(c for c in out if c["check"] == "League configured")
+    assert "fbm flaim leagues --select" in league["fix"]
+
+
 def test_health_flaim_status_reads_the_store(vault, monkeypatch):  # noqa: F811
     monkeypatch.setenv("FBM_YAHOO_ROUTE", "flaim")
     assert health._flaim_status() == {"signed_in": False}
@@ -315,6 +323,20 @@ def test_cli_route_sets_the_route(monkeypatch):
     chosen: list[str] = []
     monkeypatch.setattr(cli_flaim, "save_route", chosen.append)
     assert runner.invoke(app, ["flaim", "route", "session"]).exit_code == 0 and chosen == ["session"]
+
+
+def test_cli_route_and_status_survive_an_unknown_route(vault, monkeypatch):  # noqa: F811
+    from fbm.cli import app
+
+    monkeypatch.setenv("FBM_YAHOO_ROUTE", "carrier-pigeon")
+    shown = runner.invoke(app, ["flaim", "route"])
+    assert (
+        shown.exit_code == 1
+        and 'Unknown Yahoo route "carrier-pigeon"' in shown.output
+        and "Traceback" not in shown.output
+    )
+    status = runner.invoke(app, ["status"])
+    assert status.exit_code == 0 and "Unknown Yahoo route" in status.output
 
 
 def test_cli_commands_need_a_sign_in(vault, monkeypatch):  # noqa: F811

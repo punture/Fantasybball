@@ -46,7 +46,7 @@ Every route is read-only. FBM never changes your league, and neither can Flaim (
 4. Check every feed, then take the first snapshot:
 
    ```sh
-   uv run fbm data sync        # ESPN box scores: needed for FG%/FT% makes and attempts (see below)
+   uv run fbm data sync        # ESPN schedule and box scores (two-week matchups, the makes/attempts fallback)
    uv run fbm flaim check      # each feed OK/WARN/FAIL with counts, unmatched players and every warning
    uv run fbm snapshot
    ```
@@ -68,16 +68,16 @@ fails once it has.
 The snapshot (`fbm snapshot`, `data/yahoo_league.json`) has the same meaning on every route: teams, rosters with
 Yahoo eligibility, lineup slots and injury status, roster slots, scoring categories, standings, waiver priority,
 waiver clear dates, Yahoo-wide % owned, this week's matchups and stat leaders. Flaim's schemas leave some details
-open, so FBM fills these in itself and says so in `fbm flaim check`:
+open (Flaim sends no week dates, for one), so FBM fills these in itself and says so in `fbm flaim check`:
 
 | What | How FBM gets it on the Flaim route |
 |---|---|
-| FG%/FT% makes and attempts this week | Flaim sends the percentages. FBM rebuilds attempts for your matchup from each day's lineup (read once per past day, then kept) and the ESPN box scores of players in active slots, then applies Yahoo's percentage. Counting stats are Yahoo's own. Keep `fbm data sync` running; a mismatch between Yahoo and the box scores is listed as a warning. |
+| FG%/FT% makes and attempts this week | Yahoo's own: Flaim sends the display-only FGM/A and FTM/A rows (`246/499`) next to FG% and FT%. Only if those rows are missing, or empty (`/`) once the week is under way, does FBM rebuild attempts for your matchup from each day's lineup (read once per past day, then kept) and the ESPN box scores of players in active slots, then apply Yahoo's percentage; a mismatch is listed as a warning. |
 | Week dates | Flaim's own dates when it sends them; else the window FBM recorded while that week was current (`data/raw/flaim_weeks.json`); else the Monday–Sunday calendar week. A merged matchup (NBA Cup, All-Star break) is recognized from Yahoo's "games remaining" (more games left than the calendar week holds, or games left after the recorded window ended) and stretched to two weeks. Without that count (or without `fbm data sync`'s NBA schedule) a merged week can't be recognized: check the window `fbm flaim check` prints. |
 | Adds used this week | Counted from the league's transactions since the week began. |
 | Transaction history (intel, move verification) | Flaim reads by date range: the first sync reads a year back, later syncs from the newest stored move. |
 | Pending trades and waiver claims (`fbm offers`) | Your own pending items. A pending trade is shown as incoming or outgoing only when Flaim says who proposed it; otherwise it is listed in `fbm flaim check` warnings. |
-| Weekly retro (final results) | Stored for weeks whose dates FBM knows (any week a snapshot saw as current). FG%/FT% finals carry percentages, not makes/attempts. |
+| Weekly retro (final results) | Stored for weeks whose dates FBM knows (any week a snapshot saw as current), with Yahoo's makes/attempts. Weeks that ended before FBM's first Flaim snapshot have no known dates and are skipped. |
 | `fbm yahoo check` extras (season team stats, matchup history, Yahoo player stats) | Not available on this route: FBM doesn't use them yet. |
 
 Nothing crashes when a feed is missing: tools that need it say "not available with the Flaim route", and the
@@ -86,7 +86,8 @@ snapshot keeps the previous one when Flaim can't be read (as on the other routes
 ## Limits
 
 - **Rate limit:** 60 MCP requests a minute per user. FBM spaces calls 1.1 s apart; a snapshot takes about 25–45
-  calls (one roster per team, plus your and your opponent's past days the first time), so under a minute.
+  calls (one roster per team, plus your and your opponent's past days only when the makes/attempts fallback is needed), so
+  under a minute.
 - **7-day sign-in window** (above).
 - **A small free service:** Flaim is run by one company for free and can change its tools, add limits or stop. Keep
   another route ready (`fbm yahoo login`, or your API application) and switch with `fbm flaim route session`.

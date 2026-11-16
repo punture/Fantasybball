@@ -32,7 +32,8 @@ def yahoo_route(settings: Settings | None = None) -> str:
     route = (os.environ.get(ENV, "").strip() or (settings or load_settings()).yahoo_route or "auto").lower()
     if route not in YAHOO_ROUTES:
         raise NotConfiguredError(
-            f'Unknown [yahoo] route "{route}" in config/settings.toml (or {ENV}): use one of {", ".join(YAHOO_ROUTES)}.'
+            f'Unknown Yahoo route "{route}" (`route` under yahoo in config/settings.toml, or {ENV}): use one of '
+            f"{', '.join(YAHOO_ROUTES)}."
         )
     return route
 
@@ -72,7 +73,9 @@ def league_client(route: str | None = None) -> Any:
         from fbm.yahoo import session as web_session
 
         if web_session.load() is None:
-            raise YahooAPIError(401, "no Yahoo web session saved: run `fbm yahoo login` (or change [yahoo] route)", "")
+            raise YahooAPIError(
+                401, "no Yahoo web session saved: run `fbm yahoo login` (or change the route: `fbm flaim route`)", ""
+            )
         return YahooClient()  # picks the saved session and keeps the cookies Yahoo rotates
     if route == "api":
         from fbm.yahoo.auth import TokenManager

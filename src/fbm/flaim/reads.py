@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -76,7 +76,7 @@ def as_int(value: Any) -> int | None:
         return None
     try:
         return int(float(str(value).strip()))
-    except ValueError:
+    except (ValueError, OverflowError):  # "", "-", "inf", "nan"
         return None
 
 
@@ -581,7 +581,7 @@ def parse_roster(payload: Mapping[str, Any], team: str, day: date, game_key: str
     """A team's roster on `day`. Returns (roster, warnings about missing fields)."""
     data = data_of(payload)
     warnings: list[str] = []
-    players, no_slot, no_elig = [], 0, 0
+    players, no_slot, no_elig, editable_rows = [], 0, 0, 0
     for p in records(pick(data, "players", "roster", "entries")):
         key, _pid = _player_key(p, game_key)
         status = str(pick(p, "status", "injuryStatus", default="") or "")
@@ -594,6 +594,7 @@ def parse_roster(payload: Mapping[str, Any], team: str, day: date, game_key: str
         if not selected:
             no_slot += 1
         editable = p.get("isEditable")
+        editable_rows += editable is True
         players.append(
             RosterPlayer(
                 player_key=key,
@@ -610,8 +611,9 @@ def parse_roster(payload: Mapping[str, Any], team: str, day: date, game_key: str
         warnings.append(f"roster {team} {day}: {no_slot} player(s) without a lineup slot (assumed bench)")
     if no_elig and pick(pick(data, "snapshot", default={}), "type") in (None, "current"):
         warnings.append(f"roster {team} {day}: {no_elig} player(s) without Yahoo eligibility (derived from position)")
-    editable = any(p.is_editable for p in players) if players else False
-    return Roster(team_key=team, day=day, is_editable=editable, players=tuple(players)), warnings
+    # Like Yahoo's roster-level flag: only my own current lineup is editable. Flaim leaves isEditable out of other
+    # teams' rows and of past days (players default to editable, as in Yahoo's XML; the roster does not).
+    return Roster(team_key=team, day=day, is_editable=editable_rows > 0, players=tuple(players)), warnings
 
 
 # ------------------------------------------------------------------ available players
@@ -649,7 +651,10 @@ def parse_available(payload: Mapping[str, Any], game_key: str) -> list[YahooPlay
 def _stamp(row: Mapping[str, Any]) -> datetime | None:
     ms = as_float(pick(row, "timestamp"))
     if ms:
-        return datetime.fromtimestamp(ms / 1000 if ms > 1e11 else ms, UTC)
+        try:
+            return datetime.fromtimestamp(ms / 1000 if ms > 1e11 else ms, UTC)
+        except (ValueError, OverflowError, OSError):  # a nonsense stamp: fall back to the date
+            pass
     day = as_date(pick(row, "date"))
     return datetime(day.year, day.month, day.day, tzinfo=UTC) if day else None
 
@@ -856,11 +861,26 @@ class FlaimLeague:
     def leagues_refs(self) -> list[LeagueRef]:
         return session_leagues(self.session())
 
+    def resolved(self, ref: LeagueRef) -> tuple[LeagueRef, dict[str, Any]]:
+        """`ref` with the league's and my team's current names from league info (the session keeps the names from
+        when the league was connected; a renamed team shows its old name there), plus that info. Session values
+        when league info can't be read."""
+        try:
+            info = self.league_info(ref.league_key)
+        except FlaimError as err:
+            self.warnings.append(f"league info {ref.league_key}: {err.description}")
+            return ref, {}
+        row = next((t for t in league_team_rows(info, ref.league_key) if t["_team_key"] == ref.team_key), None)
+        team_name = str(pick(row, "teamName", "name", default="") or "") if row else ""
+        league_name = str(pick(info, "name", "leagueName", default="") or "")
+        return replace(ref, name=league_name or ref.name, team_name=team_name or ref.team_name), info
+
     def leagues(self) -> list[dict[str, str]]:
-        return [discovery_row(r) for r in self.leagues_refs()]
+        return [discovery_row(*self.resolved(r)) for r in self.leagues_refs()]
 
     def my_teams(self) -> list[dict[str, str]]:
-        return [{"team_key": r.team_key, "name": r.team_name} for r in self.leagues_refs() if r.team_key]
+        refs = [self.resolved(r)[0] for r in self.leagues_refs() if r.team_key]
+        return [{"team_key": r.team_key, "name": r.team_name} for r in refs]
 
     # ------------------------------------------------------------------ league reads
 

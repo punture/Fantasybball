@@ -8,7 +8,8 @@ routes. Three things Yahoo reports and Flaim may not are filled in here, each fl
   Monday-Sunday calendar week (stretched to two weeks when Yahoo's games-left count says the matchup is a merged one,
   as for the NBA Cup or the All-Star break);
 - adds used this week: counted from the league's transactions since the week began;
-- banked makes/attempts for my matchup: rebuilt from each day's lineup and ESPN box scores (fbm.flaim.banked).
+- banked makes/attempts for my matchup: Flaim normally sends Yahoo's own FGM/A and FTM/A rows; only when they are
+  missing or empty ("/") mid-week are they rebuilt from each day's lineup and ESPN box scores (fbm.flaim.banked).
 """
 
 from __future__ import annotations
@@ -212,13 +213,17 @@ def bank_matchup(
     mapper: Mapper,
     warnings: list[str],
 ) -> dict[str, str]:
-    """Complete my matchup's banked stats (both teams) with the box-score rebuild. Returns the source per team."""
+    """My matchup's banked stats (both teams): Yahoo's own makes/attempts when Flaim sends them (the usual case: the
+    display-only FGM/A and FTM/A rows), else completed by the box-score rebuild. Returns the source per team."""
     from fbm.analytics.boxscores import week_lines
 
     reported = {t.team_key: t.stats for m in matchups if m.status != "preevent" for t in m.teams}
     sources = {}
     for team in (league.my_team_key, league.opponent_key):
         if not team or team not in reported or league.week_start is None:
+            continue
+        if banked_mod.reports_made_attempted(reported[team]):  # no daily lineups to read, no rebuild
+            sources[team] = "yahoo"
             continue
         slots = daily_slots(reader, conn, league, team, day, mapper, warnings)
         ids = {pid for day_slots in slots.values() for pid in day_slots if not pid.startswith("yahoo:")}
@@ -294,7 +299,9 @@ def build_snapshot(
     sources: dict[str, str] = {}
     if conn is not None:
         sources = bank_matchup(league, matchups, reader, conn, day, _mapper(league, mapper), warnings)
-    else:
+    elif not all(
+        banked_mod.reports_made_attempted(t.stats) for m in matchups if m.status != "preevent" for t in m.teams
+    ):
         warnings.append("banked makes/attempts: no local database, Yahoo's reported totals only")
     warnings.extend(reader.warnings)
     reader.warnings.clear()
@@ -344,7 +351,7 @@ def sync_transactions(conn: sqlite3.Connection, reader: FlaimLeague, today: date
     today = today or datetime.now(UTC).date()
     latest = conn.execute("SELECT MAX(ts_utc) FROM league_transactions").fetchone()[0]
     start = datetime.fromisoformat(latest).date() - timedelta(days=1) if latest else None
-    start = start or today - timedelta(days=HISTORY_DAYS)
+    start = max(start or date.min, today - timedelta(days=HISTORY_DAYS))  # Flaim reads at most 366 days per call
     txs = reader.transactions_between(start, today)
     new = tx_history.store(conn, txs)
     return {

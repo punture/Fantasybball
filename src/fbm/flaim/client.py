@@ -162,16 +162,19 @@ class FlaimClient:
         return headers
 
     def _post(self, body: dict[str, Any]) -> httpx.Response:
+        """POST one message: transient failures retried (up to `max_attempts`), a rejected token refreshed once and
+        the message re-sent (that retry is not counted as a failed attempt)."""
         refreshed = False
-        resp: httpx.Response | None = None
-        for attempt in range(self._max_attempts):
+        attempt = 0
+        while True:
             self._pace()
             try:
                 resp = self._http.post(self.url, json=body, headers=self._headers())
             except httpx.TransportError as err:
-                if attempt == self._max_attempts - 1:
+                if attempt >= self._max_attempts - 1:
                     raise FlaimError(f"can't reach {self.url} ({type(err).__name__})") from err
                 self._sleep(min(2**attempt, MAX_BACKOFF_S))
+                attempt += 1
                 continue
             if resp.status_code == 401 and not refreshed:
                 self._tokens.refresh()
@@ -179,9 +182,9 @@ class FlaimClient:
                 continue
             if resp.status_code in RETRYABLE and attempt < self._max_attempts - 1:
                 self._sleep(_retry_after(resp, attempt))
+                attempt += 1
                 continue
             break
-        assert resp is not None
         if resp.status_code == 401:
             raise FlaimLoginRequired("Flaim rejected the sign-in")
         return resp

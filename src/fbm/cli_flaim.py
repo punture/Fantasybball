@@ -21,8 +21,8 @@ from fbm.config import LEAGUE_CONFIG_PATH, LeagueConfig, NotConfiguredError, loa
 from fbm.flaim import check as flaim_check
 from fbm.flaim import oauth
 from fbm.flaim.errors import FlaimError
-from fbm.flaim.reads import FlaimLeague, discovery_row
-from fbm.flaim.route import LABELS, save_route, yahoo_route
+from fbm.flaim.reads import FlaimLeague
+from fbm.flaim.route import LABELS, is_flaim, save_route, yahoo_route
 from fbm.settings import YAHOO_ROUTES, load_settings
 from fbm.timeutil import nba_today, parse_date
 
@@ -77,13 +77,14 @@ def _choose_league(reader: FlaimLeague, league_id: str | None) -> LeagueConfig:
     elif len(refs) == 1:
         chosen = refs[0]
     else:
-        _print_leagues([discovery_row(r) for r in refs])
+        _print_leagues(reader.leagues())
         idx = typer.prompt("Pick the league number to manage", type=int)
         if not 1 <= idx <= len(refs):
             _fail("Invalid selection.")
         chosen = refs[idx - 1]
     if not chosen.team_key:
         _fail(f"Flaim doesn't say which team is yours in {chosen.name}: re-connect Yahoo at https://flaim.app/leagues.")
+    chosen, _ = reader.resolved(chosen)  # current league/team names (the session can hold a team's old name)
     cfg = LeagueConfig(
         game_key=chosen.game_key,
         season=str(chosen.season_year or ""),
@@ -163,9 +164,12 @@ def _sign_in(http: httpx.Client, url: str, no_browser: bool, timeout: int) -> oa
 @flaim_app.command("logout")
 def flaim_logout() -> None:
     """Forget FBM's Flaim sign-in (your Flaim account and its Yahoo connection stay as they are)."""
-    oauth.clear()
+    try:
+        oauth.clear()
+    except Exception as err:  # noqa: BLE001 - e.g. no usable OS credential store
+        _fail(f"Couldn't remove the Flaim sign-in from your OS credential store ({type(err).__name__}: {err}).")
     console.print("Flaim sign-in removed from your OS credential store.")
-    if yahoo_route() == "flaim":
+    if is_flaim():
         console.print(
             '[yellow]\\[yahoo] route is still "flaim":[/] sign in again with `fbm flaim login`, or switch with '
             "`fbm flaim route session` (Yahoo web session) or `fbm flaim route api` (official API)."
@@ -232,7 +236,10 @@ def flaim_route(
 ) -> None:
     """Show or set how FBM reads Yahoo (the route setting in config/settings.toml)."""
     if name is None:
-        route = yahoo_route()
+        try:
+            route = yahoo_route()
+        except NotConfiguredError as err:
+            _fail(f"{err} Set it with `fbm flaim route <name>`.")
         console.print(f"Route: [bold]{route}[/] ({LABELS[route]})")
         return
     try:

@@ -119,17 +119,30 @@ def check_yahoo(
             "League configured",
             OK if league_configured else (FAIL if source == "yahoo" else WARN),
             "config/league.toml present" if league_configured else "config/league.toml missing",
-            "" if league_configured else "`fbm yahoo login` (or `fbm auth --reset`), then `fbm league select`.",
+            ""
+            if league_configured
+            else (
+                "`fbm flaim leagues --select`."
+                if flaim is not None
+                else "`fbm yahoo login` (or `fbm auth --reset`), then `fbm league select`."
+            ),
         )
     )
     if source != "yahoo":
         ready = web_session_age_days is not None
+        if flaim is not None:
+            state = (
+                "Flaim sign-in ready" if flaim.get("signed_in") else "Flaim route, not signed in (`fbm flaim login`)"
+            )
+        elif ready:
+            state = "Yahoo web session ready"
+        else:
+            state = "Yahoo API approval pending (or use `fbm yahoo login`)"
         out.append(
             result(
                 "League source",
                 WARN,
-                f"source={source}: "
-                + ("Yahoo web session ready" if ready else "Yahoo API approval pending (or use `fbm yahoo login`)"),
+                f"source={source}: {state}",
                 'Switch with `fbm setup --league-source yahoo --yes` (sets [league] source = "yahoo").',
             )
         )

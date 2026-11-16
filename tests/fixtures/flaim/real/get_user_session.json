@@ -1,0 +1,37 @@
+{
+ "success": true,
+ "currentDate": "2026-11-16T13:21:21.702Z",
+ "currentSeasons": {
+  "basketball": {
+   "year": 2026,
+   "label": "2026-27"
+  }
+ },
+ "timezone": "America/New_York",
+ "totalLeaguesFound": 1,
+ "leaguesBySport": {
+  "basketball": 1
+ },
+ "defaultSport": "basketball",
+ "defaultLeague": {
+  "platform": "yahoo",
+  "sport": "basketball",
+  "leagueId": "999.l.12345",
+  "teamId": "8",
+  "seasonYear": 2026,
+  "season": "2026-27",
+  "leagueName": "Test League",
+  "teamName": "My Old Team Name"
+ },
+ "allLeagues": [
+  {
+   "platform": "yahoo",
+   "sport": "basketball",
+   "leagueId": "999.l.12345",
+   "leagueName": "Test League",
+   "teamId": "8",
+   "teamName": "My Old Team Name",
+   "seasonYear": 2026
+  }
+ ]
+}

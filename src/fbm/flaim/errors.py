@@ -32,4 +32,4 @@ class FlaimUnavailable(FlaimError):
     """A Yahoo read FBM has no Flaim equivalent for."""
 
     def __init__(self, what: str):
-        super().__init__(f"{what} is not available with the Flaim route (`[yahoo] route` in config/settings.toml)")
+        super().__init__(f"{what} is not available with the Flaim route (`fbm flaim route` switches routes)")

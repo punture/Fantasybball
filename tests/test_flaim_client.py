@@ -154,6 +154,13 @@ def test_rate_limits_and_server_errors_are_retried_with_backoff():
     assert sleeps[:2] == [7.0, 4.0]
 
 
+def test_a_token_refresh_after_retries_still_resends_the_call():
+    tokens = FakeTokens()
+    server = FakeServer(httpx.Response(503), httpx.Response(503), httpx.Response(401), tool_result({"success": True}))
+    c, _ = make_client(server, tokens, max_attempts=3)
+    assert c.call_tool("get_standings", {})["success"] and tokens.refreshes == 1
+
+
 def test_unreachable_server_is_a_clear_error():
     def down(request):
         raise httpx.ConnectError("no route", request=request)

@@ -1,10 +1,11 @@
 """Week-to-date ("banked") stats rebuilt from what actually counted: each day's lineup and the ESPN box scores.
 
-Yahoo's scoreboard, read through Flaim, gives FG% and FT% but not always the makes and attempts behind them, and
-FBM's simulator needs makes/attempts to add the rest of the week. For every ET day of the matchup so far, each
-player in an active slot that day contributes his box-score line; bench and IL days don't count (Yahoo's rule).
-Yahoo's own figures always win: counting stats come from Yahoo when reported, and rebuilt attempts are rescaled to
-Yahoo's percentage. Pure functions; the caller supplies lineups and box-score rows.
+FBM's simulator needs makes/attempts for FG% and FT% to add the rest of the week. Flaim normally sends Yahoo's own
+display-only FGM/A and FTM/A rows ("246/499"), and then nothing is rebuilt. This is the fallback for when those rows
+are missing or empty ("/") although the week is under way: for every ET day of the matchup so far, each player in
+an active slot that day contributes his box-score line; bench and IL days don't count (Yahoo's rule). Yahoo's own
+figures always win: counting stats come from Yahoo when reported, and rebuilt attempts are rescaled to Yahoo's
+percentage. Pure functions; the caller supplies lineups and box-score rows.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from fbm.yahoo.league_reads import COUNT_STATS, banked_stats
 
 COUNT_COLS = tuple(COUNT_STATS.values())  # tpm, pts, reb, ast, stl, blk, tov
 MADE_ATT = (("fgm", "fga", "5", "FG%"), ("ftm", "fta", "8", "FT%"))  # makes, attempts, Yahoo pct stat id, label
+MADE_ATT_IDS = {"fga": "9004003", "fta": "9007006"}  # Yahoo's display-only makes/attempts rows, by attempts column
 TOTAL_COLS = (*COUNT_COLS, "fgm", "fga", "ftm", "fta")
 COUNT_TOLERANCE = (3.0, 0.08)  # a counting stat "disagrees" beyond max(3, 8% of Yahoo's value)
 PCT_TOLERANCE = 0.02  # rebuilt FG%/FT% this far from Yahoo's is worth a warning
@@ -40,6 +42,24 @@ def reconstruct(lineups: Mapping[str, Mapping[str, str]], lines: Mapping[str, Se
     return {**totals, "games": float(games)}
 
 
+def made_attempted(raw: str | None) -> bool:
+    """A Yahoo makes/attempts value with numbers on both sides ("246/499", "0/0"). "/" or "-/-" (the row Yahoo
+    shows before anything is banked) and a missing row are not."""
+    if not raw or "/" not in raw:
+        return False
+    made, att = (x.strip() for x in raw.split("/", 1))
+    try:
+        float(made), float(att)
+    except ValueError:
+        return False
+    return True
+
+
+def reports_made_attempted(reported: Mapping[str, str]) -> bool:
+    """Yahoo's own FGM/A and FTM/A are both in the reported week totals: no rebuild needed."""
+    return all(made_attempted(reported.get(sid)) for sid in MADE_ATT_IDS.values())
+
+
 def _pct(raw: str | None) -> float | None:
     try:
         return float(raw) if raw not in (None, "", "-") else None
@@ -57,10 +77,14 @@ class Banked:
 def merge(reported: Mapping[str, str], rebuilt: Mapping[str, float] | None, label: str) -> Banked:
     """Yahoo's reported week totals (stat id -> raw value) completed by the box-score rebuild where Yahoo is silent."""
     yahoo = banked_stats(dict(reported))
-    stats = dict(yahoo)
     if rebuilt is None:
-        has_ma = all(att in stats for _, att, _, _ in MADE_ATT)
-        return Banked(stats, "yahoo" if has_ma else "yahoo (no makes/attempts)")
+        has_ma = reports_made_attempted(reported)
+        return Banked(yahoo, "yahoo" if has_ma else "yahoo (no makes/attempts)")
+    for made, att, _, _ in MADE_ATT:
+        if not made_attempted(reported.get(MADE_ATT_IDS[att])):  # "/" parses as 0/0: let the rebuild fill it
+            yahoo.pop(made, None)
+            yahoo.pop(att, None)
+    stats = dict(yahoo)
     warnings: list[str] = []
     used = False
     for col in COUNT_COLS:

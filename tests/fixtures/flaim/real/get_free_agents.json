@@ -1,0 +1,220 @@
+{
+ "success": true,
+ "data": {
+  "leagueKey": "999.l.12345",
+  "leagueName": "Test League",
+  "position": "ALL",
+  "count": 12,
+  "freeAgents": [
+   {
+    "playerKey": "478.p.6513",
+    "playerId": "6513",
+    "name": "Jalen Green",
+    "position": "SG,SF",
+    "percentOwned": 67,
+    "ownershipType": "freeagents",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "acquisitionState": "free_agent",
+    "team": "PHX",
+    "id": "6513"
+   },
+   {
+    "playerKey": "478.p.6581",
+    "playerId": "6581",
+    "name": "Neemias Queta",
+    "position": "C",
+    "percentOwned": 65,
+    "ownershipType": "freeagents",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "acquisitionState": "free_agent",
+    "team": "BOS",
+    "id": "6581"
+   },
+   {
+    "playerKey": "478.p.4622",
+    "playerId": "4622",
+    "name": "Jrue Holiday",
+    "position": "PG,SG",
+    "percentOwned": 57,
+    "ownershipType": "waivers",
+    "waiverDate": "2026-11-17",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "acquisitionState": "waivers",
+    "team": "POR",
+    "id": "4622"
+   },
+   {
+    "playerKey": "478.p.6720",
+    "playerId": "6720",
+    "name": "Peyton Watson",
+    "position": "SF,PF",
+    "percentOwned": 55,
+    "ownershipType": "freeagents",
+    "status": "Q",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "acquisitionState": "free_agent",
+    "team": "CLE",
+    "id": "6720"
+   },
+   {
+    "playerKey": "478.p.6226",
+    "playerId": "6226",
+    "name": "Daniel Gafford",
+    "position": "C",
+    "percentOwned": 47,
+    "ownershipType": "freeagents",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "acquisitionState": "free_agent",
+    "team": "DAL",
+    "id": "6226"
+   },
+   {
+    "playerKey": "478.p.6403",
+    "playerId": "6403",
+    "name": "Devin Vassell",
+    "position": "SG,SF",
+    "percentOwned": 46,
+    "ownershipType": "freeagents",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "acquisitionState": "free_agent",
+    "team": "SAS",
+    "id": "6403"
+   },
+   {
+    "playerKey": "478.p.10447",
+    "playerId": "10447",
+    "name": "Khaman Maluach",
+    "position": "C",
+    "percentOwned": 43,
+    "ownershipType": "freeagents",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "acquisitionState": "free_agent",
+    "team": "PHX",
+    "id": "10447"
+   },
+   {
+    "playerKey": "478.p.10340",
+    "playerId": "10340",
+    "name": "Jaylen Wells",
+    "position": "SG,SF",
+    "percentOwned": 27,
+    "ownershipType": "waivers",
+    "waiverDate": "2026-11-17",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "acquisitionState": "waivers",
+    "team": "MEM",
+    "id": "10340"
+   },
+   {
+    "playerKey": "478.p.10312",
+    "playerId": "10312",
+    "name": "Pelle Larsson",
+    "position": "SG,SF",
+    "percentOwned": 26,
+    "ownershipType": "waivers",
+    "waiverDate": "2026-11-18",
+    "status": "Q",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "acquisitionState": "waivers",
+    "team": "MIA",
+    "id": "10312"
+   },
+   {
+    "playerKey": "478.p.4901",
+    "playerId": "4901",
+    "name": "Tobias Harris",
+    "position": "PF",
+    "percentOwned": 14,
+    "ownershipType": "freeagents",
+    "status": "O",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "acquisitionState": "free_agent",
+    "team": "SAS",
+    "id": "4901"
+   },
+   {
+    "playerKey": "478.p.6218",
+    "playerId": "6218",
+    "name": "Kevin Porter Jr.",
+    "position": "PG,SG",
+    "percentOwned": 8,
+    "ownershipType": "freeagents",
+    "status": "NA",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "acquisitionState": "free_agent",
+    "team": "MIL",
+    "id": "6218"
+   },
+   {
+    "playerKey": "478.p.5464",
+    "playerId": "5464",
+    "name": "Kristaps Porziņģis",
+    "position": "C",
+    "percentOwned": 10,
+    "ownershipType": "freeagents",
+    "status": "O",
+    "isKeeper": {
+     "status": false,
+     "cost": false,
+     "kept": false
+    },
+    "acquisitionState": "free_agent",
+    "team": "GSW",
+    "id": "5464"
+   }
+  ],
+  "leagueId": "999.l.12345",
+  "seasonYear": 2026,
+  "ordering": "platform_rostered_rate_desc",
+  "capabilities": {
+   "acquisitionState": true,
+   "rosteredRate": true,
+   "startedRate": false
+  },
+  "ownershipScope": "platform_global"
+ }
+}

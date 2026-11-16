@@ -19,7 +19,7 @@ from typing import Any
 
 from fbm.analytics.categories import NINE_CAT
 from fbm.config import RAW_DIR, LeagueConfig
-from fbm.flaim import reads
+from fbm.flaim import banked, reads
 from fbm.flaim.reads import FlaimLeague
 
 OK, WARN, FAIL, SKIP = "OK", "WARN", "FAIL", "SKIP"
@@ -87,10 +87,20 @@ def _matchups(r: FlaimLeague, cfg: LeagueConfig | None, day: date) -> tuple[str,
         return WARN, f"{len(matchups)} matchups; yours not found"
     stats = mine.team(r.team_key).stats if mine.team(r.team_key) else {}
     cats = sum(1 for c in NINE_CAT if c.yahoo_stat_id in stats)
-    ma = "makes/attempts sent" if "9004003" in stats else "no makes/attempts (rebuilt from box scores)"
+    rows = {c.stat_id for c in reads.matchup_categories(r.matchups_payload())}  # rows sent, values or not
+    listed = sum(1 for c in NINE_CAT if c.yahoo_stat_id in rows)
+    if banked.reports_made_attempted(stats):
+        ma = "Yahoo's makes/attempts sent"
+    elif "9004003" in stats:
+        ma = f"makes/attempts row empty ({stats['9004003']!r}: nothing banked yet, else rebuilt from box scores)"
+    else:
+        ma = "no makes/attempts (rebuilt from box scores)"
     dates = f"{mine.week_start}..{mine.week_end}" if mine.week_start else "no dates (estimated)"
-    status = OK if cats == 9 or mine.status == "preevent" else WARN
-    detail = f"{len(matchups)} matchups, week {mine.week} ({mine.status}); {cats}/9 category values; {ma}; {dates}"
+    status = OK if cats == 9 or (listed == 9 and (cats == 0 or mine.status == "preevent")) else WARN
+    detail = (
+        f"{len(matchups)} matchups, week {mine.week} ({mine.status}); {listed}/9 category rows, {cats} with values "
+        f"(none before the week's first games); {ma}; {dates}"
+    )
     return status, detail
 
 
@@ -182,11 +192,12 @@ def _dry_run(reader: FlaimLeague, cfg: LeagueConfig, day: date, conn: sqlite3.Co
     lg = snap.league
     sizes = sorted(len(t.players) for t in lg.teams)
     names = {t.team_key: t.name for t in lg.teams}
-    banked = ", ".join(f"{names.get(k, k)}: {v}" for k, v in snap.banked_source.items()) or "none yet"
+    banked_txt = ", ".join(f"{names.get(k, k)}: {v}" for k, v in snap.banked_source.items()) or "none yet"
     detail = (
         f"{len(lg.teams)} teams (rosters {sizes[0] if sizes else 0}-{sizes[-1] if sizes else 0} players); "
         f"week {lg.week} {lg.week_start}..{lg.week_end} ({snap.week_source}); opponent "
-        f"{names.get(lg.opponent_key or '', '-')}; banked: {banked}; {len(report.unmatched)} players without an ESPN id"
+        f"{names.get(lg.opponent_key or '', '-')}; banked: {banked_txt}; {len(report.unmatched)} players without an "
+        "ESPN id"
     )
     return Feed("Snapshot (dry run)", WARN if report.unmatched else OK, detail, used_for)
 

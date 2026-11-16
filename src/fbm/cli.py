@@ -249,15 +249,21 @@ def status() -> None:
         ("Gmail app password", credentials.GMAIL_APP_PASSWORD),
     ):
         console.print(f"{label}: {'[green]set[/]' if credentials.get(key) else '[yellow]missing[/]'}")
+    from fbm.flaim.route import LABELS, yahoo_route
     from fbm.yahoo import session as web_session
 
+    try:
+        route = yahoo_route()
+    except NotConfiguredError as err:
+        route = ""
+        console.print(f"[red]{err}[/]")
+    used = "(active route)" if route in ("auto", "session") else f"(unused: the route is {route or 'unknown'})"
     console.print(
-        f"Yahoo web session: {'[green]set[/] (active route)' if web_session.load() else 'none'} (`fbm yahoo status`)"
+        f"Yahoo web session: {f'[green]set[/] {used}' if web_session.load() else 'none'} (`fbm yahoo status`)"
     )
-    from fbm.flaim.route import LABELS, is_flaim
-
-    if is_flaim():
-        console.print(f"Yahoo route: [bold]flaim[/] ({LABELS['flaim']}; `fbm flaim status`)")
+    if route and route != "auto":
+        hint = "; `fbm flaim status`" if route == "flaim" else ""
+        console.print(f"Yahoo route: [bold]{route}[/] ({LABELS[route]}{hint})")
     try:
         cfg = load_league_config()
         console.print(

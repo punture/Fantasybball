@@ -97,7 +97,10 @@ def _iso(epoch: float) -> str | None:
 
 
 def load() -> OAuthState | None:
-    raw = credentials.get_large(credentials.FLAIM_OAUTH)
+    try:
+        raw = credentials.get_large(credentials.FLAIM_OAUTH)
+    except Exception as err:  # noqa: BLE001 - e.g. no usable OS credential store (headless Linux without a keyring)
+        raise FlaimError(f"can't read the Flaim sign-in from your OS credential store ({type(err).__name__})") from err
     if not raw:
         return None
     try:
