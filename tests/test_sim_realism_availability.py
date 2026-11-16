@@ -187,3 +187,37 @@ def test_context_week_models_use_team_schedule_and_status_day(conn):
     assert m.return_cdf(WED) == pytest.approx(C("sim.play_prob.gtd"))  # his next game is Wednesday
     season = ctx.models(["p"], horizon="season")["p"]
     assert season.recovery is None
+
+
+@pytest.mark.parametrize(
+    ("status", "ret", "effective", "override", "expect"),
+    [
+        # GTD/Q/D: the status model built from today is kept (not restarted at the effective day as a GTD)
+        ("D", None, "2026-10-21", None, {"play_prob": "status", "return_date": None, "recovery": None}),
+        # Out with an ESPN return date before the effective day: his return process starts at the return date
+        ("O", "2026-10-21", "2026-10-22", None, {"return_date": date(2026, 10, 21), "recovery": "short"}),
+        # explicit play_prob: his first game from the effective day at that probability
+        ("O", "2026-10-21", "2026-10-22", 0.9, {"return_date": date(2026, 10, 22), "return_play_prob": 0.9}),
+    ],
+)
+def test_il_activation_availability(monkeypatch, conn, status, ret, effective, override, expect):
+    from fbm.gm import il
+    from tests.test_il_waivers_dupes import il_world
+
+    seen: dict[str, PlayerModel] = {}
+    bank = il.DrawBank
+
+    def capture(models, **kw):
+        seen.update(models)
+        return bank(models, **kw)
+
+    monkeypatch.setattr(il, "DrawBank", capture)
+    il_world(monkeypatch, conn, status=status, return_date=ret)
+    il.evaluate_il_activation("I", "D", effective=effective, play_prob=override, n=200)
+    m = seen["I"]
+    named = {"status": play_probability(status), "short": C("sim.recovery.short")}
+    for attr, value in expect.items():
+        value = named.get(value, value) if isinstance(value, str) else value
+        assert getattr(m, attr) == (pytest.approx(value) if isinstance(value, float) else value), attr
+    if expect.get("recovery") == "short":
+        assert m.return_play_prob == pytest.approx(C("sim.play_prob.gtd"))

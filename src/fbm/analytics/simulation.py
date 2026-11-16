@@ -213,7 +213,8 @@ def anchor_samples(samples: np.ndarray, target: pd.Series, weight: float, lo: fl
 
     Column-wise scaling keeps each game's shape (and makes/attempts pairing); makes and attempts are scaled
     separately so shooting percentages follow the projection too. A game's makes are then capped at its attempts
-    (and 3PM at FGM): scaling makes up can push a perfect-shooting game past its attempts."""
+    (and 3PM at FGM): scaling makes up can push a perfect-shooting game past its attempts. The capped excess moves
+    onto the games with room (`_cap_makes`), so the makes mean (and FG%/FT%) still follows the projection."""
     if weight <= 0 or len(samples) == 0:
         return samples
     out = samples.astype(float, copy=True)
@@ -225,7 +226,24 @@ def anchor_samples(samples: np.ndarray, target: pd.Series, weight: float, lo: fl
         goal = (1.0 - weight) * means[i] + weight * float(t)
         out[:, i] *= float(np.clip(goal / means[i], lo, hi))
     for made, att in (("fgm", "fga"), ("ftm", "fta"), ("tpm", "fgm")):
-        out[:, COL[made]] = np.minimum(out[:, COL[made]], out[:, COL[att]])
+        out[:, COL[made]] = _cap_makes(out[:, COL[made]], out[:, COL[att]])
+    return out
+
+
+def _cap_makes(made: np.ndarray, att: np.ndarray, rounds: int = 25) -> np.ndarray:
+    """Cap each game's makes at its attempts, keeping the column's total where the attempts leave room: the excess
+    is spread over the games below their cap in proportion to their makes (a plain cap would pull the mean, and so
+    the shooting percentage, below the projection: about half of a +2-point FT% adjustment is lost to perfect
+    free-throw games)."""
+    goal = float(made.sum())
+    out = np.minimum(made, att)
+    for _ in range(rounds):
+        short = goal - float(out.sum())
+        room = (out < att) & (out > 0)
+        base = float(out[room].sum())
+        if short <= 1e-9 * max(goal, 1.0) or base <= 0:
+            break
+        out[room] = np.minimum(out[room] * (1.0 + short / base), att[room])
     return out
 
 

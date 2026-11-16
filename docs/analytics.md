@@ -74,10 +74,15 @@ proposal within `signals.acted_days`) and the replay grade of the resulting deci
 ## Availability
 
 ESPN injury status and expected return dates scale rest-of-season value (rankings, free agents, waivers, trades,
-punt scenarios) and season-level simulations; in matchup simulations each game is weighted by a play probability.
-An Out player with an ESPN return date misses every game before that date; from it the daily lineup can start him
-and each game counts at the game-time-decision probability (`sim.play_prob.gtd`), the same rule IL-activation
-evaluations use. Out players without a return date miss the whole week.
+punt scenarios) and season-level simulations. In matchup simulations availability is a return-day process per player
+and simulation: a GTD / day-to-day / questionable / doubtful status (`Q`, `D` included) sets his chance of playing
+his team's next game (`sim.play_prob.*`); once he sits, he is back for each later game with the status's recovery rate
+(`sim.recovery.short`, `sim.recovery.doubtful`) and then plays the rest, so absences are streaky rather than a coin
+flip per game. An Out player with an ESPN return date misses every game before that date; from it the daily lineup
+can start him and he plays like a game-time decision, the same rule IL-activation evaluations use. An Out player
+without a return date misses a geometric number of games (mean `availability.out_default_games`; suspensions
+`availability.susp_default_games`), though the lineup planner only starts him once he has a return date.
+Back-to-back rest risk stays an independent draw per game.
 
 ## Official weekly odds (Hashtag mode)
 
@@ -132,7 +137,13 @@ Monte Carlo over the rest of the fantasy week. It resamples players' real game l
 between stats), re-centred on the projection table's per-game means (`sim.projection_anchor`, so role/minutes changes
 and the ESPN blend show up), and multiplies by play probability. Each player's games in a simulated week share one
 role/form multiplier (`sim.form_sd`, measured from week-to-week variance), and players with a history of sitting a
-leg of back-to-backs carry that rest risk on their team's back-to-back dates (`sim.b2b_rest_*`). In the Yahoo league
+leg of back-to-backs carry that rest risk on their team's back-to-back dates (`sim.b2b_rest_*`). Each player's
+simulated week is rounded to whole numbers (unbiased stochastic rounding; makes share their attempts' draw), so
+categories tie at realistic rates and FG%/FT% are ratios of whole makes and attempts. A tied category is a tie
+(half a win in expected categories, never split); percentages compare exact ratios; a side with no attempts ('-')
+loses to any percentage and ties another '-'. `p_majority` is P(more categories won than lost), the week win under
+Yahoo's "most categories" scoring, where an equal count is a tied week. Players with thin history get synthetic
+games with overdispersed attempts and PTS = 2 FGM + 3PM + FTM (`sim.synthetic_volume_cv`). In the Yahoo league
 the stats already banked this week (live scoreboard) are added to the simulated remainder. Output includes
 per-category win/tie/loss odds and an "if the opponent streams" upper bound (the streaming planner run from their
 side). In Hashtag mode that block also carries `official_if_opponent_streams`: the official odds re-priced with the

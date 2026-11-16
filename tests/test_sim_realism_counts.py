@@ -145,3 +145,16 @@ def test_anchor_caps_makes_at_attempts():
     assert (out[:, COL["fgm"]] <= out[:, COL["fga"]]).all() and (out[:, COL["ftm"]] <= out[:, COL["fta"]]).all()
     assert (out[:, COL["tpm"]] <= out[:, COL["fgm"]]).all()
     assert out[0, COL["fgm"]] == 2.0  # a 2-for-2 game scaled up stays 2-for-2, not 4-for-2
+
+
+def test_anchor_cap_keeps_the_projected_shooting_mean():
+    # half the games are perfect at the line: a plain cap would lose half of the FT% bump to them
+    games = [line(ftm=2, fta=2, fgm=5, fga=5), line(ftm=3, fta=5, fgm=4, fga=12)] * 10
+    samples = np.array(games)
+    target = pd.Series({"ftm": 3.0, "fta": 3.5, "fgm": 5.0, "fga": 8.5})  # FT% 71% -> 86%, FG% 53% -> 59%
+    out = anchor_samples(samples, target, 1.0, 0.0, float("inf"))
+    assert (out[:, COL["ftm"]] <= out[:, COL["fta"]]).all() and (out[:, COL["fgm"]] <= out[:, COL["fga"]]).all()
+    assert out[:, COL["ftm"]].mean() == pytest.approx(3.0) and out[:, COL["fgm"]].mean() == pytest.approx(5.0)
+    assert out[0, COL["ftm"]] == 2.0 and out[1, COL["ftm"]] == pytest.approx(4.0)  # excess moved to the 3-of-5 games
+    impossible = anchor_samples(samples, pd.Series({"ftm": 4.0}), 1.0, 0.0, float("inf"))
+    assert (impossible[:, COL["ftm"]] <= impossible[:, COL["fta"]]).all()  # more makes than attempts: capped
