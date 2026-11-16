@@ -219,6 +219,18 @@ def test_weekly_retro_per_view(conn):
     assert data["odds_reliability"]["n_forecasts"] == 0
 
 
+def test_weekly_retro_covers_a_two_week_matchup_to_its_real_end(conn):
+    """NBA Cup week 2026-11-30..12-13: decisions in its second half belong to the retro of that matchup."""
+    opts = [{"id": "a", "label": "a", "spec": {"date": "2026-12-10", "starters": ["a"]}, "cat_scores": {"pts": 1}}]
+    dlog.log(conn, kind="lineup", trigger="daily-gm", et_date="2026-12-10", situation={"team_key": "me"},
+             options=opts, recommended="a")  # fmt: skip
+    today = date(2026, 12, 14)
+    seven = outcomes.weekly_retro_data(conn, POOL, NINE_CAT, date(2026, 11, 30), today)
+    assert seven["week_et"] == "2026-11-30..2026-12-06" and seven["decisions_logged_this_week"] == 0
+    whole = outcomes.weekly_retro_data(conn, POOL, NINE_CAT, date(2026, 11, 30), today, week_end=date(2026, 12, 13))
+    assert whole["week_et"] == "2026-11-30..2026-12-13" and whole["decisions_logged_this_week"] == 1
+
+
 def test_forecast_against_wrong_opponent_is_skipped(conn):
     import json
 

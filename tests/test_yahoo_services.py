@@ -3,6 +3,7 @@
 Everything runs on XML fixtures; nothing touches the network."""
 
 import sqlite3
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
@@ -137,6 +138,46 @@ def test_snapshot_keeps_matchups_and_ownership(tmp_path):
     save_league(league, tmp_path / "snap.json")
     again = load_league(tmp_path / "snap.json")
     assert again.matchups == league.matchups and again.ownership == league.ownership
+
+
+def test_snapshot_write_is_atomic(tmp_path, monkeypatch):
+    """A crash mid-write keeps the previous snapshot whole (readers never see a truncated file)."""
+    import fbm.fileio
+
+    path = tmp_path / "snap.json"
+    league = _yahoo_league()
+    save_league(league, path)
+    before = path.read_text(encoding="utf-8")
+
+    def crash(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(fbm.fileio, "replace_retrying", crash)
+    with pytest.raises(OSError):
+        save_league(replace(league, name="changed"), path)
+    assert path.read_text(encoding="utf-8") == before and load_league(path).name == league.name
+    assert [p.name for p in tmp_path.iterdir()] == ["snap.json"]  # no temp file left behind
+
+
+def test_truncated_snapshot_is_rebuilt_by_a_refresh(tmp_path, monkeypatch):
+    from fbm.league import yahoo_league
+
+    path = tmp_path / "yahoo_league.json"
+    save_league(_yahoo_league(), path)
+    path.write_text(path.read_text(encoding="utf-8")[:500], encoding="utf-8")  # e.g. killed mid-write before
+    monkeypatch.setattr(yahoo_league, "SNAPSHOT_PATH", path)
+    monkeypatch.setitem(yahoo_league._last_failure, "at", None)
+    fresh = _yahoo_league()
+    monkeypatch.setattr(yahoo_league, "refresh", lambda: (fresh, []))
+    assert yahoo_league.load_or_refresh(60) is fresh
+
+    def down():
+        raise RuntimeError("Flaim unreachable")
+
+    monkeypatch.setattr(yahoo_league, "refresh", down)
+    with pytest.raises(RuntimeError, match="Flaim unreachable.*snapshot yahoo_league.json is unreadable"):
+        yahoo_league.load_or_refresh(60)
+    monkeypatch.setitem(yahoo_league._last_failure, "at", None)
 
 
 def test_category_values_from_raw_stats():

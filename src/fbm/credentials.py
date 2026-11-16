@@ -21,11 +21,11 @@ from __future__ import annotations
 import json
 import os
 import sys
-import tempfile
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from secrets import token_hex
 
 import keyring
 from keyring.backends import fail as _fail_backend
@@ -33,6 +33,7 @@ from keyring.backends import null as _null_backend
 from keyring.errors import KeyringError, PasswordDeleteError
 
 from fbm.config import DATA_DIR, PROJECT_ROOT
+from fbm.fileio import write_text_atomic
 
 SERVICE = "fbm"
 
@@ -214,61 +215,64 @@ def _private_dir(path: Path) -> None:
 
 
 def _write_file(path: Path, secrets: dict[str, str]) -> None:
-    """Atomic replace: write a 0600 temp file next to the target, fsync, rename over it."""
+    """Atomic replace: a 0600 temp file next to the target (mkstemp), fsync'd, renamed over it."""
     _private_dir(path.parent)
     payload = json.dumps({"version": 1, "service": SERVICE, "secrets": secrets}, indent=1, sort_keys=True)
-    fd, tmp = tempfile.mkstemp(prefix=".credentials-", suffix=".tmp", dir=path.parent)  # mkstemp: mode 0600
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(payload + "\n")
-            fh.flush()
-            os.fsync(fh.fileno())
-        _replace(tmp, path)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    write_text_atomic(path, payload + "\n")
     if os.name == "posix":
         os.chmod(path, 0o600)
 
 
-def _replace(src: str, dst: Path) -> None:
-    """os.replace, retried briefly: on Windows it fails while another process has the file open for reading."""
-    for attempt in range(40):
+def _acquire(lock: Path, wait_s: float, stale_s: float) -> bool:
+    """Create `lock` exclusively, waiting up to `wait_s`; a lock older than `stale_s` (its holder died) is taken
+    over. False when another process still holds it after the wait."""
+    _private_dir(lock.parent)
+    deadline = time.monotonic() + wait_s
+    while True:
         try:
-            os.replace(src, dst)
-            return
-        except PermissionError:
-            if attempt == 39:
-                raise
+            os.close(os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+            return True
+        except FileExistsError:
+            try:
+                if time.time() - lock.stat().st_mtime > stale_s:
+                    lock.unlink(missing_ok=True)
+                    continue
+            except FileNotFoundError:
+                continue
+            if time.monotonic() > deadline:
+                return False
             time.sleep(0.05)
 
 
 @contextmanager
 def _locked(path: Path) -> Iterator[None]:
     """Cross-process lock for read-modify-write (scheduled jobs may refresh tokens at the same time)."""
-    _private_dir(path.parent)
     lock = path.with_name(path.name + ".lock")
-    deadline = time.monotonic() + _LOCK_WAIT_S
-    while True:
-        try:
-            os.close(os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
-            break
-        except FileExistsError:
-            try:
-                if time.time() - lock.stat().st_mtime > _LOCK_STALE_S:
-                    lock.unlink(missing_ok=True)
-                    continue
-            except FileNotFoundError:
-                continue
-            if time.monotonic() > deadline:
-                raise CredentialStoreError(
-                    f"{_display(lock)} is held by another FBM process. If no FBM command is running, delete it."
-                ) from None
-            time.sleep(0.05)
+    if not _acquire(lock, _LOCK_WAIT_S, _LOCK_STALE_S):
+        raise CredentialStoreError(
+            f"{_display(lock)} is held by another FBM process. If no FBM command is running, delete it."
+        )
     try:
         yield
     finally:
         lock.unlink(missing_ok=True)
+
+
+@contextmanager
+def process_lock(name: str, wait_s: float = 50.0, stale_s: float = 100.0) -> Iterator[bool]:
+    """A named cross-process lock beside the secrets file, whatever the backend (e.g. around an OAuth token refresh,
+    so two FBM processes never spend the same single-use refresh token). Yields True when held; False when it could
+    not be taken within `wait_s` (or the folder isn't writable): the caller goes on unlocked rather than fail."""
+    lock = secrets_path().with_name(f"{name}.lock")
+    try:
+        held = _acquire(lock, wait_s, stale_s)
+    except OSError:
+        held = False
+    try:
+        yield held
+    finally:
+        if held:
+            lock.unlink(missing_ok=True)
 
 
 def _file_get(name: str) -> str | None:
@@ -359,36 +363,59 @@ def require(name: str) -> str:
     return value
 
 
-def _chunk_count(head: str | None) -> int:
-    if head and head.startswith(_CHUNKS_PREFIX):
-        try:
-            return int(head[len(_CHUNKS_PREFIX) :])
-        except ValueError:
-            return 0
-    return 0
+def _chunk_names(name: str, head: str | None) -> list[str]:
+    """The chunk entries a head names: `chunks:<gen>:<n>` -> `name.<gen>.0..n-1` (older heads, `chunks:<n>`, name
+    `name.0..n-1`); [] when `head` is not a chunk head."""
+    if not head or not head.startswith(_CHUNKS_PREFIX):
+        return []
+    gen, _, count = head[len(_CHUNKS_PREFIX) :].rpartition(":")
+    try:
+        n = int(count)
+    except ValueError:
+        return []
+    prefix = f"{name}.{gen}." if gen else f"{name}."
+    return [f"{prefix}{i}" for i in range(n)]
 
 
 def put_large(name: str, value: str) -> None:
-    """Store a value of any length (split into `name.0`, `name.1`, ... with `name` holding the chunk count)."""
-    delete_large(name)
+    """Store a value of any length: chunks under a new generation (`name.<gen>.0`, `name.<gen>.1`, ...), then `name`
+    (the head: generation and chunk count) as the switch, then the old generation's chunks are removed. A reader in
+    another process sees the old value or the new one, never a mix, and a save killed midway keeps the old value."""
+    old = _chunk_names(name, get(name))
+    gen = token_hex(4)
     parts = [value[i : i + CHUNK_CHARS] for i in range(0, len(value), CHUNK_CHARS)] or [""]
     for i, part in enumerate(parts):
-        put(f"{name}.{i}", part)
-    put(name, f"{_CHUNKS_PREFIX}{len(parts)}")
+        put(f"{name}.{gen}.{i}", part)
+    put(name, f"{_CHUNKS_PREFIX}{gen}:{len(parts)}")
+    for chunk in old:
+        delete(chunk)
 
 
 def get_large(name: str) -> str | None:
-    head = get(name)
-    count = _chunk_count(head)
-    if not count:
-        return head
-    parts = [get(f"{name}.{i}") for i in range(count)]
-    if any(p is None for p in parts):
-        return None
-    return "".join(p or "" for p in parts)
+    """The value put_large stored (None when missing or incomplete). A read overlapping a save in another process
+    (its old chunks removed after the head was read) is retried on the new head."""
+    for attempt in range(3):
+        head = get(name)
+        names = _chunk_names(name, head)
+        if not names:
+            return head
+        parts = [get(chunk) for chunk in names]
+        if all(p is not None for p in parts):
+            return "".join(p or "" for p in parts)
+        if get(name) == head:  # nothing changed meanwhile: a chunk is really missing
+            return None
+        time.sleep(0.05 * (attempt + 1))
+    return None
 
 
 def delete_large(name: str) -> None:
-    for i in range(_chunk_count(get(name))):
-        delete(f"{name}.{i}")
+    for chunk in _chunk_names(name, get(name)):
+        delete(chunk)
     delete(name)
+    if backend() == FILE:  # chunks of a save killed before its switch (the file can be listed; a keyring can't)
+        try:
+            orphans = [k for k in _read_file(secrets_path()) if k.startswith(f"{name}.")]
+        except CredentialStoreError:
+            orphans = []
+        for chunk in orphans:
+            _file_delete(chunk)

@@ -15,6 +15,7 @@ from typing import Any
 
 from fbm.analytics.categories import from_league_settings
 from fbm.config import DATA_DIR, RAW_DIR, LeagueConfig
+from fbm.fileio import write_text_atomic
 from fbm.league.demo import load_league, save_league
 from fbm.league.model import DEFAULT_SLOTS, FantasyTeam, LeagueState, RosterPlayer, SlotSpec
 from fbm.yahoo import roster as yahoo_roster
@@ -216,8 +217,7 @@ def refresh(day: date | None = None) -> tuple[LeagueState, list[Match]]:
         ownership.record(conn, league)
     except Exception:
         pass
-    SETTINGS_SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SETTINGS_SUMMARY_PATH.write_text(json.dumps(summary, indent=1), encoding="utf-8")
+    write_text_atomic(SETTINGS_SUMMARY_PATH, json.dumps(summary, indent=1))
     _last_failure.update(at=None, error="")
     return league, [m for m in matches if not m.espn_id]
 
@@ -232,10 +232,22 @@ def last_refresh_error() -> str:
     return str(_last_failure["error"] or "")
 
 
+def _load_cached() -> tuple[LeagueState | None, str]:
+    """(saved snapshot, why it is unusable): (None, "") when there is none yet; (None, reason) when the file can't be
+    read (e.g. truncated by a crash mid-write), so a refresh rebuilds it instead of every tool failing on it."""
+    if not SNAPSHOT_PATH.exists():
+        return None, ""
+    try:
+        return load_league(SNAPSHOT_PATH), ""
+    except (OSError, ValueError, KeyError, TypeError) as err:
+        return None, f"{type(err).__name__}: {err}"
+
+
 def load_or_refresh(max_age_minutes: float) -> LeagueState:
-    """Fresh snapshot if possible; a stale one (with last_refresh_error set) if Yahoo can't be read right now."""
+    """Fresh snapshot if possible; a stale one (with last_refresh_error set) if Yahoo can't be read right now. An
+    unreadable snapshot counts as none: it is rebuilt by the refresh."""
     now = datetime.now(UTC)
-    cached = load_league(SNAPSHOT_PATH) if SNAPSHOT_PATH.exists() else None
+    cached, unreadable = _load_cached()
     if cached is not None:
         age = snapshot_age(cached, now)
         if age is not None and age <= timedelta(minutes=max_age_minutes):
@@ -250,4 +262,9 @@ def load_or_refresh(max_age_minutes: float) -> LeagueState:
         _last_failure.update(at=now, error=f"{type(err).__name__}: {err}")
         if cached is not None:
             return cached
+        if unreadable:
+            raise RuntimeError(
+                f"{type(err).__name__}: {err} (the saved snapshot {SNAPSHOT_PATH.name} is unreadable: {unreadable}; "
+                "the next successful refresh or `fbm snapshot` replaces it)"
+            ) from err
         raise

@@ -24,6 +24,7 @@ from typing import Any
 
 from fbm.analytics.week import date_range, fantasy_week
 from fbm.config import RAW_DIR, LeagueConfig
+from fbm.fileio import write_text_atomic
 from fbm.flaim import banked as banked_mod
 from fbm.flaim import reads
 from fbm.flaim.errors import FlaimError
@@ -162,8 +163,7 @@ def remember_week(path: Path, league_key: str, week: int, start: date, end: date
     if not isinstance(data, dict):
         data = {}
     data.setdefault(league_key, {})[str(week)] = [start.isoformat(), end.isoformat()]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")
+    write_text_atomic(path, json.dumps(data, indent=1, sort_keys=True))
 
 
 # ------------------------------------------------------------------ banked stats (my matchup)
@@ -321,7 +321,6 @@ def read_snapshot(
 
 
 def save_warnings(snap: Snapshot) -> None:
-    WARNINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     body = {
         "fetched_at": snap.league.fetched_at,
         "week": snap.league.week,
@@ -330,7 +329,7 @@ def save_warnings(snap: Snapshot) -> None:
         "banked_source": snap.banked_source,
         "warnings": snap.warnings,
     }
-    WARNINGS_PATH.write_text(json.dumps(body, indent=1), encoding="utf-8")
+    write_text_atomic(WARNINGS_PATH, json.dumps(body, indent=1))
 
 
 def last_warnings() -> dict[str, Any]:

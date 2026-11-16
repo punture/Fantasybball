@@ -26,9 +26,29 @@ class NotConfiguredError(RuntimeError):
     pass
 
 
+# How to pick the league on each `[yahoo] route` (`fbm auth` needs Yahoo API approval: only for the api route).
+_SELECT_LEAGUE = {
+    "flaim": "Run `fbm flaim leagues --select` (after `fbm flaim login`).",
+    "session": "Run `fbm yahoo login`, then `fbm league select`.",
+    "api": "Run `fbm auth` or `fbm league select`.",
+    "auto": "Run `fbm yahoo login` (or `fbm auth` once Yahoo approved your API app), then `fbm league select`.",
+}
+
+
+def select_league_hint() -> str:
+    """The league-selection step for the configured Yahoo route."""
+    try:
+        from fbm.flaim.route import yahoo_route  # lazy: fbm.flaim.route imports this module
+
+        route = yahoo_route()
+    except Exception:  # noqa: BLE001 - unreadable settings or an unknown route: the general advice
+        route = "auto"
+    return _SELECT_LEAGUE.get(route, _SELECT_LEAGUE["auto"])
+
+
 def load_league_config(path: Path = LEAGUE_CONFIG_PATH) -> LeagueConfig:
     if not path.exists():
-        raise NotConfiguredError("No league configured yet. Run `fbm auth` or `fbm league select`.")
+        raise NotConfiguredError(f"No league configured yet. {select_league_hint()}")
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     return LeagueConfig(**data["league"])
 

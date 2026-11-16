@@ -358,6 +358,29 @@ def test_expired_refresh_token_asks_for_login(vault):
         session.bearer()
 
 
+def test_two_processes_refreshing_together_spend_the_refresh_token_once(vault):
+    """Both access tokens expired (e.g. lineup-guard and a chat turn at :15): the second process waits for the first
+    under the refresh lock and adopts the tokens it saved, never re-sending the single-use rt-0."""
+    server = AuthServer()
+    oauth.save(signed_in())
+    first = oauth.TokenSession(http_for(server), clock=lambda: 1000.0 + 3600)
+    second = oauth.TokenSession(http_for(server), clock=lambda: 1000.0 + 3600)  # loaded rt-0 before the refresh
+    assert first.bearer() == "at-1" and second.bearer() == "at-1"
+    assert [f["refresh_token"] for f in server.forms] == ["rt-0"]
+
+
+def test_refresh_holds_the_cross_process_lock(vault):
+    lock = credentials.secrets_path().with_name(f"{oauth.REFRESH_LOCK}.lock")
+    server, held = AuthServer(), []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        held.append(lock.exists())
+        return server(request)
+
+    session = oauth.TokenSession(http_for(handler), signed_in(), clock=lambda: 10**4)
+    assert session.bearer() == "at-1" and held == [True] and not lock.exists()
+
+
 def test_refresh_race_adopts_the_other_processs_tokens(vault):
     server = AuthServer()
     server.refresh_ok = False  # rt-0 was already rotated by another FBM process...

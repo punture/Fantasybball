@@ -25,7 +25,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
-from fbm.analytics.week import fantasy_week
+from fbm.analytics.playoffs import build_weeks, merged_periods
 from fbm.gm import decisions as dlog
 from fbm.gm import policy
 from fbm.gm import proposals as props
@@ -43,10 +43,12 @@ def _et_day(iso: str | None) -> date | None:
 
 
 def week_number(day: date, season_start: date | None) -> int | None:
-    if season_start is None:
+    """Yahoo's matchup week of `day`: weeks counted from the season's first, the NBA Cup and All-Star matchups
+    (`playoffs.merged_weeks`) counting as one week each; None before the season or without its start."""
+    if season_start is None or day < season_start:
         return None
-    first = fantasy_week(season_start)[0]
-    return (fantasy_week(day)[0] - first).days // 7 + 1
+    weeks = build_weeks(season_start, day, merged_periods())
+    return next((w.number for w in weeks if w.start <= day <= w.end), None)
 
 
 def _decision_date(p: props.Proposal) -> date:

@@ -13,6 +13,7 @@ import pandas as pd
 
 from fbm.analytics.lineup import optimize_day
 from fbm.config import DATA_DIR
+from fbm.fileio import write_text_atomic
 from fbm.league.model import (
     DEFAULT_SLOTS,
     FantasyTeam,
@@ -147,8 +148,7 @@ def save_league(league: LeagueState, path: Path = DEMO_PATH) -> None:
     data["categories"] = [c["key"] for c in data["categories"]]
     for k in ("week_start", "week_end"):
         data[k] = data[k].isoformat() if isinstance(data[k], date) else data[k]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=1), encoding="utf-8")
+    write_text_atomic(path, json.dumps(data, indent=1))  # other jobs read it while a refresh rewrites it
 
 
 def load_league(path: Path = DEMO_PATH) -> LeagueState:

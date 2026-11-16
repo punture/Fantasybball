@@ -28,6 +28,7 @@ SCOPE = "mcp:read"
 CLIENT_NAME = "FBM fantasy basketball GM"
 REFRESH_TOKEN_DAYS = 7  # Flaim refresh tokens last 7 days; each refresh issues a new one
 EXPIRY_MARGIN_S = 60  # refresh this long before the access token runs out
+REFRESH_LOCK = "flaim-refresh"  # credentials.process_lock name held around a token refresh
 _LOGIN_ERRORS = ("invalid_grant", "invalid_client", "unauthorized_client")
 
 
@@ -333,6 +334,23 @@ class TokenSession:
         return self.state.access_token
 
     def refresh(self) -> None:
+        """New tokens. With persistence, one FBM process refreshes at a time (a refresh token is single-use): under
+        the lock, tokens another process saved meanwhile are adopted instead of spending a used refresh token."""
+        if not self._persist:
+            self._refresh()
+            return
+        with credentials.process_lock(REFRESH_LOCK):
+            try:
+                stored = load()
+            except FlaimError:  # unreadable store: refresh with the tokens in hand
+                stored = None
+            if stored is not None and stored.refresh_token and stored.refresh_token != self.state.refresh_token:
+                self.state = stored  # another FBM process refreshed while this one waited
+                if stored.access_valid(self._clock()):
+                    return
+            self._refresh()
+
+    def _refresh(self) -> None:
         for _ in range(2):
             used = self.state.refresh_token
             if not used:

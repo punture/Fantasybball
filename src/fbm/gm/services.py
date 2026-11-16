@@ -752,19 +752,26 @@ def _lineup_plan(
     punts = _strategy_punts(None)
     ros = _value(c, punts).to_dict()
     params = _policy.all_values(conn)
-    opp = _default_opponent(league)
+    opponent_note = None
+    try:
+        opp: FantasyTeam | None = _default_opponent(league)
+    except GMError:  # week rolled before Yahoo named the opponent: a ROS-style lineup, never no lineup
+        opp, opponent_note = None, f"This week's opponent is unknown: {league.rollover_note}"
     # This week's odds (banked stats + the rest of the week, HT's in HT mode) for today and, in a Daily - Tomorrow
     # league, for the first changeable day of this week (today's lineup stands as set); a later day is simulated
     # from that day.
     current = target == nba_today() or (target == changeable and target <= _week_window()[2])
     start = None if current else target
-    try:
-        odds, odds_source = _week_odds(league, opp, int(C("lineup.swing_sims")), start)
-    except Exception:  # noqa: BLE001 - no odds: every category weighs the same (ROS-style lineup)
-        odds, odds_source = {}, "unavailable"
+    odds: dict[str, float] = {}
+    odds_source = "unavailable"
+    if opp is not None:
+        try:
+            odds, odds_source = _week_odds(league, opp, int(C("lineup.swing_sims")), start)
+        except Exception:  # noqa: BLE001 - no odds: every category weighs the same (ROS-style lineup)
+            odds, odds_source = {}, "unavailable"
     weights = choosers.week_weights(odds, params, punts) if odds else {}
     objective: dict[str, Any] = _objective_situation()
-    if objective and odds:
+    if objective and odds and opp is not None:
         try:
             pivotal = _pivotal_weights(league, opp, start, punts)
         except Exception:  # noqa: BLE001 - fall back to the contested-category weights
@@ -869,6 +876,7 @@ def _lineup_plan(
         "lineup_locked": target < changeable,
         "waiting_returns": _waiting_returns(league, target, ros),
         "objective": "p_win_week" if objective else "expected_cats",
+        "opponent_note": opponent_note,
     }
 
 
@@ -1056,13 +1064,14 @@ def _ht_week_odds(league: LeagueState, opp: FantasyTeam, n: int) -> dict[str, An
 
 def _decision_situation(
     league: LeagueState,
-    opp: FantasyTeam,
+    opp: FantasyTeam | None,
     odds: dict[str, float],
     view_used: str | None,
     day: date | None = None,
     **extra: Any,
 ) -> dict[str, Any]:
-    """Situation features logged with every decision (contract C)."""
+    """Situation features logged with every decision (contract C). `opp` is None while this week's opponent is
+    unknown (opponent features are then None / empty)."""
     start, _ws, we = _week_window()
     days = date_range(start, we)
     playing = teams_playing(_conn(), start, we)
@@ -1085,9 +1094,11 @@ def _decision_situation(
         adds_left=None if limit is None else max(0, limit - used),
         week=league.week,
         days_left=len(days),
-        games_left={"me": games(league.my_team), "opp": games(opp)},
-        banked=_ht.banked_by_cat(banked.get(league.my_team_key, {}), banked.get(opp.team_key, {}), league.categories),
-        opponent_key=opp.team_key,
+        games_left={"me": games(league.my_team), "opp": games(opp) if opp else None},
+        banked=_ht.banked_by_cat(
+            banked.get(league.my_team_key, {}), banked.get(opp.team_key, {}) if opp else {}, league.categories
+        ),
+        opponent_key=opp.team_key if opp else None,
         view_used=view_used,
         ht_as_of=ctx().ht_as_of,
         team_key=league.my_team_key,
@@ -1141,6 +1152,8 @@ def _lineup_rules(plan: dict[str, Any], league: LeagueState) -> dict[str, Any]:
         "objective": plan["objective"],
         "il_returns_needing_a_spot": _waiting_lines(league, waiting),
     }
+    if plan.get("opponent_note"):
+        out["opponent_note"] = f"{plan['opponent_note']} This lineup weighs every category the same (no matchup odds)."
     if plan["lineup_locked"]:
         out["lineup_locked_note"] = (
             f"Daily - Tomorrow league: this day's lineup is already locked; changes made now apply from "
@@ -3205,12 +3218,11 @@ def prediction_calibration() -> dict[str, Any]:
 
 
 def weekly_retro_data_tool(week_start: str | None = None) -> dict[str, Any]:
-    from datetime import timedelta
-
     from fbm.gm import decision_services
 
     c = _grading_ctx()
-    start = parse_date(week_start) if week_start else fantasy_week(nba_today() - timedelta(days=7))[0]
+    today = nba_today()
+    start, end, note = outcomes.retro_week(today, parse_date(week_start) if week_start else None)
     sync = decision_services.sync_yahoo_results()
     try:
         verify_moves(sync_first=True)  # only moves Yahoo shows are graded
@@ -3221,14 +3233,18 @@ def weekly_retro_data_tool(week_start: str | None = None) -> dict[str, Any]:
         c.pool,
         c.cfg.categories,
         start,
-        nba_today(),
+        today,
         _strategy_punts(None),
         names=c.projections["name"].to_dict(),
+        week_end=end,
     )
+    data["week_complete"] = end < today
+    if note:
+        data["week_note"] = note
     data["yahoo_sync"] = sync
     if _is_yahoo():
         try:
-            data["trade_offers"] = _trade_offer_retro(start)
+            data["trade_offers"] = _trade_offer_retro(start, end)
         except Exception as err:  # retro data must still come back if offer history cannot be read
             data["trade_offers"] = {"error": f"{type(err).__name__}: {err}"}
     for key, fn in (("signal_grades", signal_grades_tool),):
@@ -3239,17 +3255,18 @@ def weekly_retro_data_tool(week_start: str | None = None) -> dict[str, Any]:
     return data
 
 
-def _trade_offer_retro(start: date) -> dict[str, Any]:
-    """Trade acceptance for the retro: all offers, by partner and by HT value-premium band, plus this week's."""
+def _trade_offer_retro(start: date, end: date) -> dict[str, Any]:
+    """Trade acceptance for the retro: all offers, by partner and by HT value-premium band, plus the week's
+    (`start`..`end` ET, inclusive)."""
     from datetime import timedelta
 
     from fbm.gm import trade_offers
 
     league = active_league()
     rows, _stats = _offer_context(league)
-    day_start = datetime.combine(start, datetime.min.time(), ET)
-    lo = day_start.astimezone(UTC).isoformat(timespec="seconds")
-    hi = (day_start + timedelta(days=7)).astimezone(UTC).isoformat(timespec="seconds")
+    lo = datetime.combine(start, datetime.min.time(), ET).astimezone(UTC).isoformat(timespec="seconds")
+    after = datetime.combine(end + timedelta(days=1), datetime.min.time(), ET)
+    hi = after.astimezone(UTC).isoformat(timespec="seconds")
     return trade_offers.retro_summary(rows, lo, hi, {t.team_key: t.name for t in league.teams})
 
 

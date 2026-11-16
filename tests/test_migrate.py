@@ -30,6 +30,25 @@ def _proposal(conn, kind, payload, status, title="t", executed="2026-10-23T09:25
     return f"P-{cur.lastrowid}"
 
 
+@pytest.mark.parametrize(
+    ("day", "week"),
+    [
+        (date(2026, 10, 20), 1),
+        (date(2026, 10, 26), 2),
+        (date(2026, 11, 30), 7),  # the NBA Cup matchup (11-30..12-13) is one week
+        (date(2026, 12, 7), 7),
+        (date(2026, 12, 14), 8),
+        (date(2027, 2, 15), 17),  # the All-Star matchup (02-15..02-28) is one week
+        (date(2027, 2, 22), 17),
+        (date(2027, 3, 1), 18),
+        (date(2026, 10, 1), None),  # before the season
+    ],
+)
+def test_week_number_counts_merged_matchups_once(day, week):
+    assert migrate.week_number(day, date(2026, 10, 20)) == week
+    assert migrate.week_number(day, None) is None
+
+
 def test_backfill_maps_kinds_options_and_chosen(conn):
     _proposal(conn, "strategy", {"punts": []}, "done")
     claim = _proposal(conn, "waiver_claim", {"add": "1", "drop": "2"}, "done")

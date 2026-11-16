@@ -191,6 +191,26 @@ def test_lineup_tools_in_a_daily_today_league(monkeypatch, conn, tmp_path):
     assert out["locked_game_started"] == ["A"] and out["objective"] == "expected_cats"
 
 
+def test_lineup_tools_still_recommend_when_the_rolled_weeks_opponent_is_unknown(monkeypatch, conn, tmp_path):
+    """Monday before Yahoo rolls over with no pairing for the new week: a ROS-style lineup, not an error."""
+    from dataclasses import replace
+
+    league = world(monkeypatch, conn, tmp_path, HEAD_TODAY)
+    rolled = replace(league, opponent_key=None, rolled_from_week=4, rollover_note="Yahoo still reports week 4.")
+    monkeypatch.setattr(svc, "active_league", lambda: rolled)
+    with pytest.raises(svc.GMError, match="opponent is unknown"):
+        svc._default_opponent(rolled)
+    out = svc.lineup_steps()
+    assert out["status"] in ("recommended", "already_set") and "Yahoo still reports week 4" in out["opponent_note"]
+    situation = logged_situation(conn, "lineup")
+    assert situation["opponent_key"] is None and situation["odds"] == {}
+    opt = svc.optimize_lineup()
+    assert opt["odds_source"] == "unavailable" and opt["swing_weights"] == {} and "opponent_note" in opt
+    monkeypatch.setattr(svc, "active_league", lambda: league)  # a known opponent: odds, no note
+    known = svc.optimize_lineup()
+    assert known["odds_source"] != "unavailable" and "opponent_note" not in known
+
+
 def test_evaluate_add_drop_follows_the_deadline_and_tipped_games(monkeypatch, conn, tmp_path):
     world(monkeypatch, conn, tmp_path, HEADONE_TOMORROW)
     out = svc.evaluate_add_drop(add="F", drop="D", n=300)
