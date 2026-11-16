@@ -19,7 +19,13 @@ from fbm.league.model import IL_SLOTS, FantasyTeam
 
 
 def fantasy_week(day: date) -> tuple[date, date]:
-    """Monday-Sunday week containing `day` (Yahoo NBA weeks run Mon-Sun ET)."""
+    """The Yahoo matchup week containing `day` when Yahoo's own bounds are unknown: Monday-Sunday ET, except Yahoo's
+    merged matchup periods (`playoffs.merged_weeks`: the NBA Cup and All-Star break weeks), which span both weeks."""
+    from fbm.analytics.playoffs import merged_periods
+
+    for lo, hi in merged_periods():
+        if lo <= day <= hi:
+            return lo, hi
     start = day - timedelta(days=day.weekday())
     return start, start + timedelta(days=6)
 
