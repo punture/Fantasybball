@@ -520,6 +520,39 @@ _ALL = [
         "Speed/coverage trade-off.",
         "heuristic",
     ),
+    # late-week protection (protect_plan: bench poor shooters / turnover-prone players to flip FG%, FT%, TO)
+    Constant(
+        "protect.min_gain_cats",
+        0.05,
+        "expected categories",
+        "Minimum gain in expected categories won for protect_plan to recommend a benching (category leagues).",
+        "Same bar as stream.min_gain; above Monte Carlo noise with common random numbers.",
+        "heuristic",
+    ),
+    Constant(
+        "protect.min_gain_p_win",
+        0.02,
+        "probability",
+        "Minimum gain in P(win the week) for protect_plan to recommend a benching (one-win-per-week leagues).",
+        "Judgment: 2 points of weekly win odds is worth a manual lineup change.",
+        "heuristic",
+    ),
+    Constant(
+        "protect.sims",
+        4000,
+        "simulations",
+        "Simulated weeks per benching option in protect_plan (common random numbers across options).",
+        "Ratio categories need the tails; ~150 options x 4k sims stays well under a few seconds.",
+        "heuristic",
+    ),
+    Constant(
+        "protect.pair_candidates",
+        5,
+        "players",
+        "Players (best single benchings) tried as the second sit on top of the best single one.",
+        "Greedy pairs keep the search small; a third sit rarely clears the bar on its own.",
+        "heuristic",
+    ),
     # trades
     Constant(
         "trade.max_their_value_loss",
