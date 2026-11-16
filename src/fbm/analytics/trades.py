@@ -183,6 +183,13 @@ class TradeSide:
     def judged_value_delta(self) -> float:
         return self.value_delta if self.value_delta_build is None else self.value_delta_build
 
+    @property
+    def perceived_value_delta(self) -> float:
+        """What the partner is likely to see when judging the offer: managers go largely by overall rankings, so a
+        build-aware discount (an inferred punt) can't make a big overall-ranking loss look fair. The lower of the
+        overall and the build-judged value change."""
+        return min(self.value_delta, self.judged_value_delta)
+
 
 @dataclass
 class TradeEval:
@@ -333,9 +340,9 @@ def evaluate_trade(
     me, them = sides
     labels = {c.key: c.label for c in sim.categories}
     notes = []
-    if them.judged_value_delta >= 0:
+    if them.perceived_value_delta >= 0:
         notes.append("Looks fair or better to them by overall rankings (helps acceptance).")
-    elif them.judged_value_delta < -1.0:
+    elif them.perceived_value_delta < -1.0:
         notes.append("They lose overall ranking value; expect pushback unless it fixes a clear need.")
     if build.punts:
         noise = them.expected_delta - them.expected_delta_build
@@ -364,7 +371,7 @@ def evaluate_trade(
                     "count even; we cut him for the best free agent (already counted)."
                 )
     return TradeEval(
-        me, them, verdict_for(me.expected_delta, them.expected_delta_build, them.judged_value_delta), notes
+        me, them, verdict_for(me.expected_delta, them.expected_delta_build, them.perceived_value_delta), notes
     )
 
 
@@ -630,5 +637,6 @@ def trade_realism(
 
 
 def realism_of(ev: TradeEval, ht_premium: float | None = None, ht_note: str = "", **kw) -> TradeRealism:
-    """`trade_realism` for an evaluated trade: the partner's side as judged by their build."""
-    return trade_realism(ev.them.judged_value_delta, ev.them.expected_delta_build, ht_premium, ht_note=ht_note, **kw)
+    """`trade_realism` for an evaluated trade: the partner's side by overall rankings and by their build (the lower
+    value counts: `TradeSide.perceived_value_delta`)."""
+    return trade_realism(ev.them.perceived_value_delta, ev.them.expected_delta_build, ht_premium, ht_note=ht_note, **kw)

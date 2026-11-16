@@ -81,17 +81,22 @@ def optimize_day(
 
     assignments: dict[str, str] = {p.player_id: p.selected for p in il_players + locked_players}
     if candidates and open_slots:
-        weights = np.full((len(candidates), len(open_slots)), INELIGIBLE)
+        # One bench column per candidate, so staying on the bench is a real choice: a player without a game today
+        # scores nothing wherever he sits, so his value doesn't move him and only the stability bonus does. That keeps
+        # the owner from being told to make lineup changes that change nothing.
+        columns = open_slots + ["BN"] * len(candidates)
+        weights = np.full((len(candidates), len(columns)), INELIGIBLE)
         for i, p in enumerate(candidates):
-            game = GAME_WEIGHT * play_probability(p.status) if has_game(p) else 0.0
-            base = game + float(value.get(p.player_id, 0.0))
-            for j, slot in enumerate(open_slots):
-                if can_fill(p.eligible, slot):
+            base = GAME_WEIGHT * play_probability(p.status) + float(value.get(p.player_id, 0.0)) if has_game(p) else 0.0
+            for j, slot in enumerate(columns):
+                if slot == "BN":
+                    weights[i, j] = STABILITY_BONUS if p.selected == "BN" else 0.0
+                elif can_fill(p.eligible, slot):
                     weights[i, j] = base + (STABILITY_BONUS if p.selected == slot else 0.0)
         rows, cols = linear_sum_assignment(weights, maximize=True)
         for i, j in zip(rows, cols, strict=True):
-            if weights[i, j] > INELIGIBLE / 2:
-                assignments[candidates[i].player_id] = open_slots[j]
+            if weights[i, j] > INELIGIBLE / 2 and columns[j] != "BN":
+                assignments[candidates[i].player_id] = columns[j]
     for p in players:
         assignments.setdefault(p.player_id, "BN")  # unassigned candidates and benched (`sit`) players
 

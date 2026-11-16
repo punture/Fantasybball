@@ -121,6 +121,17 @@ def test_daily_digest_is_verdict_first_with_engine_numbers():
     assert len(text) <= digest.DIGEST_LIMIT
 
 
+def test_a_stream_timed_for_a_later_day_is_not_a_today_move():
+    # Real-league case: the plan adds Gafford on Wednesday, after the dropped player's Mon/Tue games.
+    d = _data(lineup={"date_et": "2026-11-16", "changes": [], "il_moves_needing_a_roster_move": []})
+    d["stream"]["moves"][0].update(add="Daniel Gafford", drop="Toumani Camara", effective_et="2026-11-18")
+    verdict = digest.render(d, SETTINGS).splitlines()[2]
+    assert "Today: stream" not in verdict
+    assert "Today: 1 proposal(s) need you. Next: stream Daniel Gafford on Wed Nov 18, not before (+0.28 cats)." in (
+        verdict
+    )
+
+
 def test_unavailable_sections_get_a_short_note():
     d = _data(odds=Unavailable("GMError: no games"), stream=Unavailable("RuntimeError: boom"), waiver=None)
     text = digest.render(d, SETTINGS)

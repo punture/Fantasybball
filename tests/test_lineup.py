@@ -84,3 +84,15 @@ def test_started_teams_and_il_eligibility():
     assert started_teams(games, now) == {"BOS", "NY", "POR", "PHX"}
     assert with_il_eligibility(("C", "UTIL"), "OUT") == ("C", "UTIL", "IL", "IL+")
     assert with_il_eligibility(("C", "UTIL", "IL", "IL+"), "GTD") == ("C", "UTIL")
+
+
+def test_players_without_a_game_are_not_shuffled_by_value():
+    # Real-league case: on a day neither guard plays, FBM told the owner to swap them (value-ordered), a change that
+    # changes nothing but costs taps in Yahoo.
+    players = [p("suggs", "G", "PG"), p("quickley", "G", "BN"), p("anunoby", "F", "BN"), p("bey", "F", "UTIL")]
+    value = {"suggs": -2.05, "quickley": -0.36, "anunoby": -0.38, "bey": -1.95}
+    res = optimize_day(players, SLOTS, playing={"anunoby"}, value=value)
+    assert res.assignments["suggs"] == "PG" and res.assignments["quickley"] == "BN"
+    # the player with a game still gets a starting slot
+    assert res.assignments["anunoby"] != "BN" and res.starters_with_games == 1
+    assert set(res.changes) == {"anunoby"}

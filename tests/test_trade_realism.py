@@ -57,6 +57,35 @@ def test_p37_equivalent_fails_on_ht_premium_with_sign_toward_us():
     assert trade_realism(0.0, 0.2, ht_value_premium(sent=13.9, received=10.0)).ok
 
 
+def _side(value_delta, value_delta_build, cats_delta=0.1):
+    return TradeSide(
+        "t.2",
+        "Partner",
+        ["a"],
+        ["b"],
+        cats_before={"pts": 0.5},
+        cats_after={"pts": 0.5 + cats_delta},
+        value_delta=value_delta,
+        value_delta_build=value_delta_build,
+        punts=("reb",),
+    )
+
+
+def test_an_inferred_punt_cannot_make_a_big_ranking_loss_look_fair():
+    # Real-league case: the partner gives two stars for one role player. Their inferred 4-category punt valued the
+    # stars near zero (-0.75 by build), but by overall rankings they lose -6.95: no manager accepts that.
+    them = _side(value_delta=-6.95, value_delta_build=-0.75)
+    assert them.perceived_value_delta == -6.95
+    ev = TradeEval(_side(7.6, None), them, "")
+    r = realism_of(ev)
+    assert not r.ok and [x.rule for x in r.failures] == ["their_ranking_value"]
+    assert rules_by_name(r)["their_ranking_value"].value == -6.95
+    assert trades_mod.verdict_for(0.8, 0.03, them.perceived_value_delta).startswith("lopsided")
+    # a build discount still applies the other way: a player they'd cut anyway costs them little
+    assert _side(value_delta=0.4, value_delta_build=-0.2).perceived_value_delta == -0.2
+    assert realism_of(TradeEval(_side(1.0, None), _side(0.4, -0.2), "")).ok
+
+
 def test_p27_equivalent_passes():
     r = trade_realism(-0.15, 0.179, ht_value_premium(sent=10.0, received=10.5))
     assert r.ok and r.failures == ()

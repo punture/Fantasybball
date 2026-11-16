@@ -154,7 +154,7 @@ def _verdict(d: Mapping[str, Any]) -> str:
         )
     else:
         head = "Matchup odds unavailable."
-    todo = []
+    todo, later = [], []
     lineup = d.get("lineup")
     if _ok(lineup) and lineup.get("changes"):
         todo.append(f"{len(lineup['changes'])} lineup change(s)")
@@ -162,9 +162,15 @@ def _verdict(d: Mapping[str, Any]) -> str:
     if _ok(stream) and stream.get("moves"):
         moves = stream["moves"]
         gain = sum(float(m["gain_expected_cats"]) for m in moves) if weekly else float(moves[0]["gain_expected_cats"])
-        todo.append(
-            f"{len(moves)} stream(s) (+{gain:.2f} cats)" if weekly else f"stream {moves[0]['add']} (+{gain:.2f} cats)"
-        )
+        if weekly:
+            todo.append(f"{len(moves)} stream(s) (+{gain:.2f} cats)")
+        else:
+            effective = _effective_day(moves[0])
+            if effective is not None and effective > d["today_et"]:
+                # The plan times the add after the dropped player's last useful game: doing it today would cost games.
+                later.append(f"stream {moves[0]['add']} on {day_label(effective)}, not before (+{gain:.2f} cats)")
+            else:
+                todo.append(f"stream {moves[0]['add']} (+{gain:.2f} cats)")
     waiting = _waiting(d.get("proposals"))
     if waiting:
         todo.append(f"{len(waiting)} proposal(s) need you")
@@ -173,7 +179,16 @@ def _verdict(d: Mapping[str, Any]) -> str:
         todo.append(f"{len(offers['incoming_trades'])} trade offer(s)")
     when = "this week" if weekly else "today"
     act = f"{when.capitalize()}: {', '.join(todo)}." if todo else f"No moves needed {when}."
+    if later:
+        act += f" Next: {', '.join(later)}."
     return f"**Verdict:** {head} {act}"
+
+
+def _effective_day(move: Mapping[str, Any]) -> date | None:
+    try:
+        return date.fromisoformat(str(move.get("effective_et") or ""))
+    except ValueError:
+        return None
 
 
 def _header(d: Mapping[str, Any]) -> list[str]:
