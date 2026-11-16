@@ -50,7 +50,7 @@ Close the terminal and open a new one, then check both work: `git --version` and
 ```sh
 git clone https://github.com/punture/Fantasybball.git
 cd Fantasybball
-git checkout <BRANCH>
+git checkout claude/great-dijkstra-0ke6wo
 uv sync
 ```
 
