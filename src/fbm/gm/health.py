@@ -232,15 +232,25 @@ _LINEUP_RE = re.compile(r"^## .*· Lineup (\d{4}-\d{2}-\d{2})", re.M)
 
 
 def check_journal(
-    journal: dict[date, str], phase: str, local_today: date, game_days: set[date], season_start: date | None
+    journal: dict[date, str],
+    phase: str,
+    local_today: date,
+    game_days: set[date],
+    season_start: date | None,
+    first_entry: date | None = None,
 ) -> dict[str, str]:
-    """journal: local date -> file text. Daily entries keyed by local date; lineups by ET game date in the title."""
+    """journal: local date -> file text. Daily entries keyed by local date; lineups by ET game date in the title.
+    first_entry: the oldest journal day on disk (the install); its partial day and anything before are not checked."""
     if phase != "regular":
         return result("Scheduled runs", OK, f"{phase}: no scheduled runs expected yet")
     days = C("health.journal_lookback_days")
     start = local_today - timedelta(days=days)
     if season_start:
         start = max(start, season_start)
+    if first_entry is not None:
+        start = max(start, first_entry + timedelta(days=1))
+        if start >= local_today:
+            return result("Scheduled runs", OK, "new install: checked from the first full day of scheduled runs")
     window = [start + timedelta(days=i) for i in range((local_today - start).days)]
     missing_daily = [d for d in window if not journal.get(d, "").count("\n## ")]
     lineups = {date.fromisoformat(m) for text in journal.values() for m in _LINEUP_RE.findall(text)}
@@ -439,6 +449,17 @@ def _snapshot_age_min(path: Path, now: datetime) -> float | None:
     return (now - _parse(fetched)).total_seconds() / 60 if fetched else None
 
 
+def _first_journal_day(journal_dir: Path) -> date | None:
+    days = []
+    if journal_dir.exists():
+        for f in journal_dir.glob("*.md"):
+            try:
+                days.append(date.fromisoformat(f.stem))
+            except ValueError:
+                continue
+    return min(days) if days else None
+
+
 def _read_journal(journal_dir: Path, since: date) -> dict[date, str]:
     out: dict[date, str] = {}
     if journal_dir.exists():
@@ -563,7 +584,14 @@ def gather(
     journal = _read_journal(memory.JOURNAL_DIR, local_today - timedelta(days=lookback + 1))
     game_days = {date.fromisoformat(d) for d in regular}
     checks.append(
-        check_journal(journal, phase, local_today, game_days, date.fromisoformat(min(regular)) if regular else None)
+        check_journal(
+            journal,
+            phase,
+            local_today,
+            game_days,
+            date.fromisoformat(min(regular)) if regular else None,
+            _first_journal_day(memory.JOURNAL_DIR) or local_today,
+        )
     )
     checks += check_notifications(
         settings.email_enabled, outbox, now, settings.notify_channels, _notify_readiness(settings)

@@ -114,6 +114,21 @@ def test_journal_gaps():
     assert health.check_journal({}, "preseason", today, set(), None)["status"] == "OK"
 
 
+def test_journal_new_install_is_not_a_failure():
+    today = date(2026, 11, 16)
+    entry = "\n## 09:00 local / Mon 09:00 ET · decision · Daily GM\n"
+    # Installed today: nothing before the install is expected.
+    r = health.check_journal({today: entry}, "regular", today, {date(2026, 11, 15)}, date(2026, 10, 20), today)
+    assert r["status"] == "OK" and "new install" in r["detail"]
+    # Installed 3 days ago, every full day since has its entries: OK; a missed day after install still counts.
+    first = date(2026, 11, 13)
+    full = {date(2026, 11, d): entry for d in (13, 14, 15)}
+    assert health.check_journal(full, "regular", today, set(), date(2026, 10, 20), first)["status"] == "OK"
+    gap = {date(2026, 11, 13): entry, date(2026, 11, 15): entry}
+    r = health.check_journal(gap, "regular", today, set(), date(2026, 10, 20), first)
+    assert r["status"] in ("WARN", "FAIL") and "2026-11-14" in r["detail"] and "2026-11-12" not in r["detail"]
+
+
 def test_notifications_and_storage():
     outbox = [{"status": "failed", "subject": "Daily", "created_at": _iso(NOW - timedelta(hours=2))}]
     out = health.check_notifications(False, outbox, NOW)
