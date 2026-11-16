@@ -30,6 +30,8 @@ with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as f:
     f.write(json.dumps(rec) + "\\n")
 if a == ["--version"]:
     print(os.environ.get("FAKE_OC_VERSION", "OpenClaw 2026.11.2 (abc1234)"))
+elif a[:2] == ["cron", "remove"]:
+    sys.stdin.read()  # a CLI may read stdin: it must not swallow the installer's own input
 elif a[:2] == ["cron", "list"]:
     print(os.environ.get("FAKE_CRON_LIST", ""))
 elif a[:2] == ["config", "get"]:
@@ -291,3 +293,33 @@ def test_gateway_down_stops_before_changing_anything(env: Env) -> None:
     r = env.run("--chat-id", "123456", "--yes", FAKE_GATEWAY_DOWN="1")
     assert r.returncode == 1 and "Gateway isn't reachable" in r.stderr
     assert not env.skill.exists()
+
+
+def test_uninstall_removes_every_fbm_job(env: Env) -> None:
+    jobs = [{"id": f"j{i}", "name": n} for i, n in enumerate(("fbm:health", "fbm:data-sync", "fbm:lineup-guard"))]
+    listing = json.dumps({"result": {"jobs": [*jobs, {"id": "k", "name": "my-own-job"}]}})  # nested shape too
+    r = env.run("--uninstall", "--yes", FAKE_CRON_LIST=listing)
+    assert r.returncode == 0, r.stderr
+    assert env.argvs("cron", "remove") == [["cron", "remove", "j0"], ["cron", "remove", "j1"], ["cron", "remove", "j2"]]
+
+
+def test_unknown_job_names_stop_before_any_change(env: Env) -> None:
+    for args in (("--jobs", "lineup-gaurd"), ("--cron", "morning-digset=0 9 * * *"), ("--cron", "morning-digest")):
+        r = env.run("--chat-id", "123456", "--yes", *args)
+        assert r.returncode == 1 and ("Unknown job" in r.stderr or "NAME=EXPR" in r.stderr), (args, r.stderr)
+        assert env.calls() == [] and not env.skill.exists()
+    r = env.run("--chat-id", "123456", "--yes", "--jobs", "health, lineup-guard")  # spaces after commas are fine
+    assert r.returncode == 0, r.stderr
+    assert {_opt(a, "--name") for a in env.argvs("cron", "add")} == {"fbm:health", "fbm:lineup-guard"}
+
+
+def test_disabled_failure_alert_is_kept_with_a_warning(env: Env) -> None:
+    r = env.run(
+        "--chat-id",
+        "123456",
+        "--yes",
+        FAKE_CFG_cron_failureAlert='{"enabled":false}',
+        FAKE_CFG_cron_failureAlert_enabled="false",
+    )
+    assert r.returncode == 0, r.stderr
+    assert not env.argvs("config", "patch") and "disabled" in r.stderr

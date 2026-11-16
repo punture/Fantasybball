@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import shlex
 import tomllib
 from pathlib import Path
 
@@ -82,6 +83,31 @@ def test_render_windows_paths_keep_backslashes():
     assert f"`{prefix} health`" in files["references/health.md"]  # re.sub must not eat the backslashes
     assert r.command_prefix("/opt/x/fbm", platform="windows") == "/opt/x/fbm"
     assert r.command_prefix(WIN_BIN, platform="posix") == "'C:\\fbm\\.venv\\Scripts\\fbm.exe'"
+
+
+def _code_spans(text: str, start: str) -> list[str]:
+    return [s for s in re.findall(r"`([^`]+)`", text) if s.startswith(start)]
+
+
+def test_skill_quotes_values_safely_for_each_shell():
+    # exec runs a shell: a team name like $(...) in double quotes would run on the Gateway host.
+    for bin_path, platform in ((POSIX_BIN, "posix"), (WIN_SPACES_BIN, "windows")):
+        skill = r.plan(ROOT, bin_path, platform=platform)["SKILL.md"]
+        assert not re.search(r"\b[a-z_]+=\"", skill), platform  # no key="value" anywhere
+        assert "query='Jalen Brunson'" in skill and "never double quotes" in skill
+        assert r.QUOTE_TOKEN not in skill and not r.TOKEN.search(skill)
+    posix = r.plan(ROOT, POSIX_BIN)["SKILL.md"]
+    example = _code_spans(posix, "owner_quote='yes")
+    assert example and shlex.split(example[0]) == ["owner_quote=yes, let's do it"]  # what sh passes to FBM
+    windows = r.plan(ROOT, WIN_SPACES_BIN, platform="windows")["SKILL.md"]
+    assert "`owner_quote='yes, let''s do it'`" in windows and "’’" in windows
+    assert "'\\''" not in windows
+
+
+def test_render_rejects_unknown_template_tokens():
+    with pytest.raises(ValueError, match="__TYPO__"):
+        r.render_skill("run __FBM_BIN__ __TYPO__", "/x/fbm")
+    assert r.render_skill("run __FBM_BIN__", "/srv/__odd__/fbm") == "run /srv/__odd__/fbm"
 
 
 def test_skill_frontmatter_follows_openclaw_rules():
@@ -192,6 +218,8 @@ def test_job_ids_reads_every_list_shape():
     assert r.job_ids(json.dumps(jobs)) == expected
     assert r.job_ids("Gateway: local\n" + json.dumps({"data": jobs, "next": None})) == expected
     assert r.job_ids("[info] gateway ok\n" + json.dumps({"jobs": jobs})) == expected
+    assert r.job_ids(json.dumps({"ok": True, "result": {"jobs": jobs}})) == expected  # nested envelope
+    assert r.job_ids(json.dumps({"ok": True, "result": {"page": 1, "rows": jobs}})) == expected
     assert r.job_ids("") == [] and r.job_ids("{}") == []
     assert r.job_ids(json.dumps({"jobs": [{"name": "fbm:no-id"}]})) == []
 

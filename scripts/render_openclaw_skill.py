@@ -33,6 +33,14 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 TEMPLATE = Path("openclaw") / "skills" / "fbm" / "SKILL.md.tmpl"
 BIN_TOKEN = "__FBM_BIN__"
+QUOTE_TOKEN = "__OWNER_QUOTE_RULE__"
+TOKEN = re.compile(r"__[A-Z][A-Z_]*__")
+# Inside single quotes the shell expands nothing; only an apostrophe needs care. PowerShell also ends a single-quoted
+# string at a curly apostrophe (Telegram apps often send one), so on Windows every kind is doubled.
+OWNER_QUOTE_RULE = {
+    "posix": "write each apostrophe in it as `'\\''`, e.g. `owner_quote='yes, let'\\''s do it'`",
+    "powershell": "double each apostrophe in it, straight or curly (`''`, `’’`): `owner_quote='yes, let''s do it'`",
+}
 MARKER = "fbm-openclaw-skill"  # in every generated SKILL.md: installers only replace or remove what FBM generated
 SKILL_NAME = "fbm"
 JOB_PREFIX = "fbm:"
@@ -55,10 +63,14 @@ def is_windows_path(path: str) -> bool:
     return bool(WINDOWS_PATH.match(path))
 
 
+def uses_powershell(bin_path: str, platform: str = "auto") -> bool:
+    """OpenClaw's exec runs PowerShell on a Windows Gateway and a POSIX shell everywhere else (Linux, macOS, WSL)."""
+    return platform == "windows" or (platform == "auto" and is_windows_path(bin_path))
+
+
 def command_prefix(bin_path: str, platform: str = "auto") -> str:
     """How the agent's exec tool should spell the FBM program: POSIX sh quoting, or PowerShell on Windows."""
-    windows = platform == "windows" or (platform == "auto" and is_windows_path(bin_path))
-    if not windows:
+    if not uses_powershell(bin_path, platform):
         return shlex.quote(bin_path)
     if WINDOWS_BARE_OK.match(bin_path):
         return bin_path
@@ -83,8 +95,13 @@ def _with_prefix(text: str, prefix: str) -> str:
     return UV_RUN_FBM.sub(lambda _m: prefix, text)
 
 
-def render_skill(template: str, prefix: str) -> str:
-    return template.replace(BIN_TOKEN, prefix)
+def render_skill(template: str, prefix: str, powershell: bool = False) -> str:
+    """Fill the template's tokens; every value goes in single quotes, so only the apostrophe escape differs by shell."""
+    unknown = sorted(set(TOKEN.findall(template)) - {BIN_TOKEN, QUOTE_TOKEN})
+    if unknown:
+        raise ValueError(f"unknown template token(s): {', '.join(unknown)}")
+    rule = OWNER_QUOTE_RULE["powershell" if powershell else "posix"]
+    return template.replace(QUOTE_TOKEN, rule).replace(BIN_TOKEN, prefix)
 
 
 def render_reference(source: str, text: str, prefix: str) -> str:
@@ -106,7 +123,8 @@ def render_reference(source: str, text: str, prefix: str) -> str:
 def plan(repo: Path, bin_path: str, platform: str = "auto") -> dict[str, str]:
     """Every generated file (relative path -> content), in a deterministic order."""
     prefix = command_prefix(bin_path, platform)
-    files = {"SKILL.md": render_skill((repo / TEMPLATE).read_text(encoding="utf-8"), prefix)}
+    template = (repo / TEMPLATE).read_text(encoding="utf-8")
+    files = {"SKILL.md": render_skill(template, prefix, uses_powershell(bin_path, platform))}
     for path in sorted((repo / "agents" / "skills").glob("*/SKILL.md")):
         source = f"agents/skills/{path.parent.name}/SKILL.md"
         files[f"references/{path.parent.name}.md"] = render_reference(source, path.read_text(encoding="utf-8"), prefix)
@@ -171,13 +189,26 @@ def settings_chat_id(path: Path) -> str:
     return str(value).strip() if value is not None else ""
 
 
-def _job_rows(data: object) -> list[dict]:
-    if isinstance(data, dict):
-        for key in ("jobs", "data", "items", "results", "automations"):
-            if isinstance(data.get(key), list):
-                return [j for j in data[key] if isinstance(j, dict)]
+def _looks_like_jobs(rows: list) -> bool:
+    return any(isinstance(j, dict) and "name" in j and ("id" in j or "jobId" in j) for j in rows)
+
+
+def _job_rows(data: object, depth: int = 0) -> list[dict]:
+    """The job list in `cron list --json` output: a bare list, or a list under a known key, searched a few levels deep
+    (e.g. {"result": {"jobs": [...]}}): missing it would silently duplicate jobs on re-install and remove none."""
+    if isinstance(data, list):
+        return [j for j in data if isinstance(j, dict)]
+    if not isinstance(data, dict) or depth > 3:
         return []
-    return [j for j in data if isinstance(j, dict)] if isinstance(data, list) else []
+    for key in ("jobs", "data", "items", "results", "automations"):
+        if isinstance(data.get(key), list):
+            return [j for j in data[key] if isinstance(j, dict)]
+    for value in data.values():
+        if isinstance(value, list) and _looks_like_jobs(value):
+            return [j for j in value if isinstance(j, dict)]
+        if isinstance(value, dict) and (rows := _job_rows(value, depth + 1)):
+            return rows
+    return []
 
 
 def _first_json(text: str) -> object:
@@ -296,6 +327,9 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):  # a non-ASCII path on a cp1252 Windows pipe must not crash after writing
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="backslashreplace")
     args = _parser().parse_args(argv)
     if args.cmd == "render":
         try:

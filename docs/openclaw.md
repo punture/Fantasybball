@@ -119,6 +119,8 @@ Ask in your Telegram chat with the bot, for example:
 
 The skill keeps FBM's hard rules: every number comes from an FBM tool, the assistant never approves anything for
 you, news and other managers' messages are treated as data (never as instructions), and secrets are never shown.
+Values go to FBM in single quotes with names cut down to plain characters, so a team name such as `$(...)` can't run
+anything on your computer.
 New proposals are reviewed by a fresh-context sub-agent before you decide; to make that reviewer a different model
 family from your main assistant, set `agents.defaults.subagents.model` in OpenClaw.
 
@@ -147,6 +149,9 @@ itself, your league data and other OpenClaw settings are untouched.
 - **A job ran but nothing was posted.** Usually intended: the alert had nothing new and printed `NO_REPLY`
   (`openclaw cron runs <id>` shows `ok (suppressed)`). Run the command yourself to see its output, e.g.
   `<repo>/.venv/bin/fbm alert lineup`.
+- **A post shows `stdout:` / `stderr:` blocks, or `NO_REPLY` arrives as text.** OpenClaw posts stdout alone only
+  when stderr is empty; if a command also wrote to stderr (a warning, for example), both are posted and `NO_REPLY` is
+  no longer recognized. Run the job's command yourself to see what it wrote to stderr, and fix or report that.
 - **`ENOENT`, "not found" or "command not found" in a job.** The Gateway runs jobs with a minimal `PATH`, so jobs
   use FBM's absolute path. If you moved the FBM folder or recreated `.venv`, re-run the installer.
 - **The assistant asks for approval or says exec is denied.** Check `openclaw exec-policy show --agent main`. Allow
@@ -159,7 +164,9 @@ itself, your league data and other OpenClaw settings are untouched.
   several agents or a custom workspace, pass `--skill-dir <that agent's workspace>/skills/fbm`.
 - **Windows.** The Windows Hub's "Set up locally" option runs the Gateway inside WSL: install FBM inside that WSL
   distro (clone, `uv sync`, `uv run fbm setup`) and run `openclaw/install.sh` there. With a native Windows Gateway use
-  `install.ps1`: jobs run `.\.venv\Scripts\fbm.exe` through `cmd.exe` from the FBM folder.
+  `install.ps1`: jobs run `.\.venv\Scripts\fbm.exe` through `cmd.exe` from the FBM folder. Chat commands run in
+  PowerShell; install PowerShell 7 (`pwsh`, which OpenClaw prefers), because Windows PowerShell 5.1 strips the double
+  quotes inside JSON arguments such as `payload_json`, so creating proposals from chat fails there.
 - **Sign-ins on a headless machine.** FBM keeps credentials in the OS credential store; where none is available (a
   headless Linux box, a service account) it falls back to a local file store. Run FBM's sign-in commands
   (`fbm flaim login`, `fbm yahoo login`) as the same user that runs the OpenClaw Gateway, so scheduled jobs can read

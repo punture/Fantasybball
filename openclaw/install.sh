@@ -133,7 +133,9 @@ run() { # a command that changes something: printed under --dry-run, else run wi
     printf '  [dry-run] %s\n' "$(quote "$@")"
     return 0
   fi
-  LAST_OUT="$("$@" 2>&1)"
+  # stdin from /dev/null: a captured prompt would hang unseen, and a child reading stdin would swallow the rest of a
+  # `while read` loop's input (uninstall's job list).
+  LAST_OUT="$("$@" 2>&1 </dev/null)"
 }
 
 NL=$'\n'
@@ -166,8 +168,30 @@ argv_json() { # a JSON array of strings, for --command-argv
 
 job_selected() { # job_selected NAME
   [ -z "$SELECT_JOBS" ] && return 0
-  case ",$SELECT_JOBS," in *",$1,"* | *",${1#"$JOB_PREFIX"},"*) return 0 ;; esac
+  case ",${SELECT_JOBS// /}," in *",$1,"* | *",${1#"$JOB_PREFIX"},"*) return 0 ;; esac
   return 1
+}
+
+known_job() { # known_job NAME (with or without the fbm: prefix)
+  local entry
+  for entry in "${JOBS[@]}"; do
+    case "${entry%%|*}" in "$1" | "$JOB_PREFIX$1") return 0 ;; esac
+  done
+  return 1
+}
+
+check_job_names() { # a typo in --jobs or --cron would otherwise schedule nothing, or keep the default time, silently
+  local name item entry all=""
+  for entry in "${JOBS[@]}"; do all="$all ${entry%%|*}"; done
+  set -f
+  for name in $(printf '%s' "$SELECT_JOBS" | tr ',' ' '); do
+    known_job "$name" || die "Unknown job '$name' in --jobs. Jobs:$all"
+  done
+  set +f
+  for item in ${CRON_OVERRIDES[@]+"${CRON_OVERRIDES[@]}"}; do
+    case "$item" in *=?*) ;; *) die "--cron needs NAME=EXPR (e.g. morning-digest=\"0 9 * * *\"), got '$item'." ;; esac
+    known_job "${item%%=*}" || die "Unknown job '${item%%=*}' in --cron. Jobs:$all"
+  done
 }
 
 job_schedule() { # job_schedule NAME DEFAULT -> --cron override, else FBM_CRON_<NAME>, else DEFAULT
@@ -229,6 +253,7 @@ locate_openclaw() {
     return 0
   fi
   OPENCLAW="$(command -v "$OPENCLAW")"
+  case "$OPENCLAW" in /*) ;; *) OPENCLAW="$PWD/$OPENCLAW" ;; esac # --openclaw ./x: settings need an absolute path
   OC_FOUND=1
   [ "$UNINSTALL" = 1 ] && return 0
   local text version rc=0
@@ -342,7 +367,11 @@ send_test_message() {
 ensure_failure_alert() {
   step "Failure alerts"
   if [ "$OC_FOUND" = 1 ] && "$OPENCLAW" config get cron.failureAlert --json >/dev/null 2>&1; then
-    ok "cron.failureAlert is already set; left unchanged"
+    if [ "$(first_line "$("$OPENCLAW" config get cron.failureAlert.enabled 2>/dev/null || true)")" = false ]; then
+      warn "cron.failureAlert is set but disabled (enabled: false): a failing fbm:health or fbm:data-sync won't alert you. Left unchanged."
+    else
+      ok "cron.failureAlert is already set; left unchanged"
+    fi
     return 0
   fi
   local patch
@@ -516,6 +545,7 @@ uninstall() {
   local id name
   if [ "$OC_FOUND" = 1 ]; then
     load_existing_jobs
+    [ -n "$EXISTING" ] || ok "No fbm:* jobs found in OpenClaw"
     while IFS="$(printf '\t')" read -r id name; do
       [ -n "$id" ] || continue
       if run "$OPENCLAW" cron remove "$id"; then ok "Removed job $name"; else warn "Couldn't remove $name ($id): $(first_line "$LAST_OUT")"; fi
@@ -553,6 +583,7 @@ uninstall() {
 
 main() {
   say "${BOLD}FBM x OpenClaw${RESET}$([ "$DRY_RUN" = 1 ] && printf ' (dry run)')"
+  check_job_names
   locate_fbm
   locate_openclaw
   if [ "$UNINSTALL" = 1 ]; then

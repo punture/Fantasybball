@@ -174,6 +174,32 @@ function Test-JobSelected([string]$Name) {
     return (($wanted -contains $Name) -or ($wanted -contains $Name.Substring($JobPrefix.Length)))
 }
 
+function Test-KnownJob([string]$Name) {
+    foreach ($job in $JobTable) {
+        if (($job.Name -eq $Name) -or ($job.Name -eq ($JobPrefix + $Name))) { return $true }
+    }
+    return $false
+}
+
+# A typo in -Jobs or -Cron would otherwise schedule nothing, or keep the default time, silently.
+function Assert-JobNames {
+    $all = ($JobTable | ForEach-Object { $_.Name }) -join ' '
+    if ($Jobs) {
+        foreach ($name in $Jobs.Split(',')) {
+            $short = $name.Trim()
+            if ($short -and (-not (Test-KnownJob $short))) { Stop-Install "Unknown job '$short' in -Jobs. Jobs: $all" }
+        }
+    }
+    foreach ($item in $Cron) {
+        $eq = $item.IndexOf('=')
+        if (($eq -lt 1) -or ($eq -eq ($item.Length - 1))) {
+            Stop-Install "-Cron needs NAME=EXPR (e.g. 'morning-digest=0 9 * * *'), got '$item'."
+        }
+        $short = $item.Substring(0, $eq)
+        if (-not (Test-KnownJob $short)) { Stop-Install "Unknown job '$short' in -Cron. Jobs: $all" }
+    }
+}
+
 # ------------------------------------------------------------------ state (what --uninstall undoes)
 
 function Read-State {
@@ -360,7 +386,11 @@ function Send-TestMessage {
 function Set-FailureAlert {
     Write-Step 'Failure alerts'
     if ($script:OcFound -and ((Invoke-Native $script:OcExe @('config', 'get', 'cron.failureAlert', '--json') -NoStderr).Code -eq 0)) {
-        Write-Ok 'cron.failureAlert is already set; left unchanged'
+        if ((Get-OpenClawConfig 'cron.failureAlert.enabled') -eq 'false') {
+            Write-Warn 'cron.failureAlert is set but disabled (enabled: false): a failing fbm:health or fbm:data-sync won''t alert you. Left unchanged.'
+        } else {
+            Write-Ok 'cron.failureAlert is already set; left unchanged'
+        }
         return
     }
     $patch = Join-Path ([System.IO.Path]::GetTempPath()) ('fbm-openclaw-patch-' + [guid]::NewGuid().ToString('N') + '.json')
@@ -558,6 +588,7 @@ function Invoke-Uninstall {
     Resolve-SkillDir
     if ($script:OcFound) {
         if ($script:Py) { Get-ExistingJobs } else { $script:Existing = @() }
+        if (@($script:Existing).Count -eq 0) { Write-Ok 'No fbm:* jobs found in OpenClaw' }
         foreach ($job in $script:Existing) {
             $r = Invoke-Change $script:OcExe @('cron', 'remove', $job.Id)
             if ($r.Code -eq 0) { Write-Ok "Removed job $($job.Name)" } else { Write-Warn "Couldn't remove $($job.Name) ($($job.Id)): $(Get-FirstLine $r.Text)" }
@@ -605,6 +636,7 @@ function Invoke-Uninstall {
 $title = 'FBM x OpenClaw'
 if ($DryRun) { $title += ' (dry run)' }
 Write-Host $title -ForegroundColor White
+Assert-JobNames
 Find-Fbm
 Find-OpenClaw
 if ($Uninstall) {
