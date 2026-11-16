@@ -7,9 +7,9 @@ Dates are **US/Eastern** NBA game days (`YYYY-MM-DD`).
 
 | Command | Purpose |
 |---|---|
-| `fbm setup` | Set up or re-check FBM: settings, memory, NBA data, agent files, automation, Yahoo league, Hashtag, health. Safe to re-run. Interactive setup asks about Hashtag once your Yahoo league is connected and can run `fbm hashtag login`/`check`/`import`. Flags: `--agent`, `--gm-model`, `--reviewer-model`, `--routine-model`, `--timezone`, `--automation`, `--jobs`, `--league-source demo\|yahoo`, `--email/--no-email`, `--quiet-hours`, `--expiry-hours`, `--yahoo-approved`, `--hashtag/--no-hashtag` (Hashtag Basketball Premium, required for a real league), `--hashtag-league-id` (default: the Yahoo league id), `--skip-data`, `--yes`/`-y` (non-interactive), `--check` (verify only, writes nothing) |
-| `fbm status` | What is configured (never prints secrets) |
-| `fbm health` | Health checks (OK/WARN/FAIL): data freshness, Yahoo access/snapshot, Hashtag Basketball gate, stale proposals, missed runs, storage. Exits 1 on any FAIL |
+| `fbm setup` | Set up or re-check FBM: secret store, settings, memory, NBA data, agent files, automation, Yahoo league, data layer, health. Safe to re-run. A Yahoo league with Hashtag off runs on FBM's **free ESPN engine** (fully supported; the default). Interactive setup asks how to read Yahoo (Flaim recommended), whether you want Telegram alerts (then runs `fbm notify setup`), and, once your league is connected, whether to add the optional Hashtag upgrade. Flags: `--agent`, `--gm-model`, `--reviewer-model`, `--routine-model`, `--timezone`, `--automation`, `--jobs`, `--league-source demo\|yahoo`, `--yahoo-route flaim\|session\|api\|auto` (`[yahoo] route`), `--telegram/--no-telegram` (adds/removes `telegram` in `[notify] channels`), `--email/--no-email`, `--quiet-hours`, `--expiry-hours`, `--yahoo-approved`, `--hashtag/--no-hashtag` (optional paid upgrade: Hashtag Basketball Premium as the data layer), `--hashtag-league-id` (default: the Yahoo league id), `--skip-data`, `--yes`/`-y` (non-interactive), `--check` (verify only, writes nothing). Free-edition walkthrough: [free-setup.md](free-setup.md) |
+| `fbm status` | What is configured, including where secrets live (OS keyring, or `data/secrets/credentials.json` on a machine without one; `FBM_CREDENTIALS_BACKEND=keyring\|file` forces one). Never prints secrets |
+| `fbm health` | Health checks (OK/WARN/FAIL): data freshness, Yahoo access/snapshot, league categories FBM can't model (FAIL when a scored one is ignored), Hashtag Basketball gate, stale proposals, missed runs, storage. Exits 1 on any FAIL |
 | `fbm constants` | Every tunable engine constant (value, kind, source); override in `config/constants.toml` |
 | `fbm backup [--dest DIR]` | Zip `memory/`, `reports/`, settings, league config and the NBA database to a local folder (default `data/backups/`; no secrets) |
 | `fbm dashboard [--port 8501]` | Launch the local Streamlit dashboard |
@@ -59,11 +59,11 @@ Jobs: `data-sync`, `lineup-guard`, `daily-gm`, `weekly-retro`, `trade-scan`, `he
 
 ## Hashtag Basketball Premium (`fbm hashtag`)
 
-FBM's data layer for a real league (required: a Hashtag Basketball Premium subscription with the Yahoo league
-imported into its premium league tools), active when `[hashtag] enabled = true` in `config/settings.toml` (set by
-`fbm setup --hashtag`)
-(`league_id` = the Yahoo league id; environment variable `FBM_HASHTAG_ENABLED=0|1` overrides `enabled`). The demo
-league runs on FBM's built-in ESPN engine instead. While HT is enabled but unhealthy, FBM makes no suggestions (no
+Optional paid upgrade: FBM's data layer for a real league instead of the free ESPN engine (needs a Hashtag Basketball
+Premium subscription with the Yahoo league imported into its premium league tools), active when
+`[hashtag] enabled = true` in `config/settings.toml` (set by `fbm setup --hashtag`)
+(`league_id` = the Yahoo league id; environment variable `FBM_HASHTAG_ENABLED=0|1` overrides `enabled`). With it
+off (the default), real and demo leagues run on FBM's built-in ESPN engine. While HT is enabled but unhealthy, FBM makes no suggestions (no
 fallback). HT content is personal-use only.
 
 | Command | Purpose |

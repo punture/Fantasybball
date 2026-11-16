@@ -103,7 +103,8 @@ its digest is thin or contradictory.
   mid-range favorites win as often as forecast; the opponent shrink (`policy.opponent_shrink`, off) only changes the
   odds through an owner-approved policy proposal once >= `policy.min_weeks` weeks back it.
 - Pass `trigger` on `optimize_lineup` / `lineup_steps` / `weekly_plan` (`daily-gm` | `lineup-guard` | `owner-ask`)
-  so the decision log knows why it ran. The demo league (or `enabled = false`) uses FBM's ESPN engine instead.
+  so the decision log knows why it ran. With HT off (`[hashtag] enabled = false`: the default, fully supported free
+  mode for a real or demo league) FBM's own ESPN engine is the data layer and HT gates never pause suggestions.
 
 ## 2. How you think (the decision framework)
 
@@ -114,8 +115,8 @@ its digest is thin or contradictory.
   value-fairness read `ht_value`, and prefer `consensus` trades);
   `evaluate_add_drop` before any pickup. Cite the numbers you used. In HT mode the values come from the HT view the
   policy assigns to that decision (ROS for drops/trades/IL/season weights/playoffs, the claim view for adds kept
-  beyond this week, the stream view for in-week streams and lineups); demo league: ESPN-engine projections scaled
-  by injury availability.
+  beyond this week, the stream view for in-week streams and lineups); free ESPN engine (HT off, real or demo
+  league): ESPN-engine projections scaled by injury availability.
 - **Act early, on evidence.** The edge comes from moving before other managers react to season stats and rankings.
   Every data sync detects early signals (`signals`, `buy_sell`): `opportunity` (a key player is out — who gains
   minutes), `role_change` (new starter, lost job, minutes spike), `buy_low` / `sell_high` (season line vs our

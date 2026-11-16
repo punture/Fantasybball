@@ -1,6 +1,8 @@
 # FBM settings. `fbm setup` copies this file to config/settings.toml (gitignored, per install) and fills it in.
-# Secrets never go here: they live in the OS credential store (Windows Credential Manager / macOS Keychain /
-# Linux Secret Service) via `fbm auth` and `fbm notify setup`.
+# Secrets never go here: `fbm auth`, `fbm flaim login` and `fbm notify setup` store them in the OS credential store
+# (Windows Credential Manager / macOS Keychain / Linux Secret Service), or, on a machine without one (e.g. headless
+# Linux), in FBM's private file data/secrets/credentials.json (gitignored). FBM_CREDENTIALS_BACKEND=keyring|file
+# forces one.
 
 [owner]
 # Your IANA time zone (e.g. "America/New_York", "Europe/London", "Asia/Manila"). Used for quiet hours and
@@ -8,9 +10,22 @@
 timezone = "UTC"
 
 [league]
-# "demo" (simulated league over real players) until you connect Yahoo (`fbm yahoo login`, or the official API once
-# approved), then "yahoo".
+# "demo" (simulated league over real players) until you connect Yahoo (see [yahoo] route below), then "yahoo".
 source = "demo"
+
+[yahoo]
+# How FBM reads your Yahoo league (always read-only; FBM never changes your league):
+#   "flaim"   - recommended for the free edition: Flaim (flaim.app), a free hosted read-only connector with its own
+#               approved Yahoo access. Sign up and connect Yahoo at flaim.app, then `fbm flaim login`.
+#   "session" - your own Yahoo browser sign-in (`fbm yahoo login`); undocumented by Yahoo, a Terms of Service grey area.
+#   "api"     - your own approved Yahoo developer app (`fbm auth`); Yahoo's approval takes 3-8 weeks.
+#   "auto"    - a saved Yahoo web session if there is one, else the official API.
+# FBM_YAHOO_ROUTE overrides this for one process.
+route = "auto"
+
+[flaim]
+# Flaim's MCP endpoint (used when [yahoo] route = "flaim"). Leave as is.
+url = "https://api.flaim.app/mcp"
 
 [agent]
 # The AI coding agent you use: copilot | claude-code | codex | cursor | gemini | generic
@@ -34,6 +49,14 @@ jobs = []
 expiry_hours = 18
 
 [notify]
+# Where alerts and digests go, in order: any of "telegram", "openclaw", "email". FBM sends to each one listed; with
+# both "openclaw" and "telegram" it tries OpenClaw first and falls back to Telegram directly if that fails.
+# Not set = email only when email_enabled = true. `fbm setup --telegram` adds "telegram" here.
+# channels = ["telegram"]
+# Your Telegram chat id (`fbm notify setup` fills it in; the bot token itself goes to the secret store).
+telegram_chat_id = ""
+# The OpenClaw command, if you use the "openclaw" channel (a full path if it isn't on PATH).
+openclaw_bin = "openclaw"
 # Optional Gmail notifications (`fbm notify setup`). Reports also live in reports/ and your agent session.
 email_enabled = false
 # Empty = send to the Gmail sender address.
@@ -42,9 +65,10 @@ recipients = []
 quiet_hours = ""
 
 [hashtag]
-# Hashtag Basketball Premium (hashtagbasketball.com, Patreon). When enabled, HT is FBM's only source of player
+# Optional paid upgrade. Off (the default) = FBM's free ESPN engine, fully supported for your real league.
+# Hashtag Basketball Premium (hashtagbasketball.com, Patreon): when enabled, HT is FBM's only source of player
 # projections and weekly matchup totals, and FBM gives no suggestions while HT is unhealthy (no fallback).
-# Sign in with `fbm hashtag login` (your own browser sign-in; the session lives in the OS credential store).
+# Sign in with `fbm hashtag login` (your own browser sign-in; the session goes to the secret store).
 # Personal use only: HT content stays local and is never republished.
 enabled = false
 # HT's league id for your imported Yahoo league (the Yahoo league id, e.g. "30273").

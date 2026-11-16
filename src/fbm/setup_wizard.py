@@ -1,8 +1,12 @@
 """`fbm setup` logic: settings file merging, timezone handling, and the idempotent setup steps.
 
 Pure where possible; every external command goes through an injectable `runner` so tests never touch the network,
-Yahoo, or the user's real config. Secrets are never handled here: Yahoo and Gmail credentials are entered by the
-user in the `fbm auth` / `fbm notify setup` prompts and stored in the OS credential store.
+Yahoo, or the user's real config. Secrets are never handled here: Yahoo, Flaim, Telegram and Gmail credentials are
+entered by the user in the `fbm auth` / `fbm flaim login` / `fbm notify setup` prompts and stored by fbm.credentials
+(the OS credential store, or FBM's private secrets file on machines without one).
+
+Free mode (Yahoo league + Hashtag off, FBM's own ESPN engine) is a fully supported setup; Hashtag Basketball Premium
+is an optional paid upgrade.
 """
 
 from __future__ import annotations
@@ -44,22 +48,60 @@ YAHOO_GUIDE = (
     "Run `fbm setup --league-source yahoo --yes`, then `fbm snapshot` and `fbm ids`.",
 )
 
-# No API approval needed: read the league through the owner's own Yahoo sign-in (fbm.yahoo.session).
-YAHOO_SESSION_GUIDE = (
-    "Connect now without API approval: `fbm yahoo login` (sign in to Yahoo once in a browser window; read-only), "
-    "pick your league, and let it switch FBM to your Yahoo league. Then `fbm yahoo check`. Or wait for API "
-    "approval:",
+# ---- free mode: Yahoo connection routes ([yahoo] route) -------------------------------------------------------
+YAHOO_ROUTES = ("auto", "flaim", "session", "api")
+ROUTE_LABELS = {  # explicit routes, as shown in the setup report ("auto" shows none)
+    "flaim": "Flaim",
+    "session": "your Yahoo web session",
+    "api": "the official Yahoo API",
+}
+# Flaim: a free hosted read-only connector with its own approved Yahoo app (docs/flaim.md).
+FLAIM_GUIDE = (
+    "Connect Yahoo through Flaim (free, read-only; Flaim has its own approved Yahoo access): sign up at "
+    "https://flaim.app and connect Yahoo at https://flaim.app/leagues, then run `fbm flaim login` and "
+    "`fbm flaim check` (see docs/flaim.md).",
+    "Pick your league and switch FBM to it: `fbm league select`, `fbm setup --league-source yahoo --yes`, then "
+    "`fbm snapshot` and `fbm ids`.",
 )
+SESSION_ROUTE_GUIDE = (
+    "Connect with your own Yahoo sign-in: `fbm yahoo login` (opens a browser window once; read-only), then "
+    "`fbm yahoo check`. Yahoo doesn't document this route and its Terms of Service restrict automated access: a "
+    "grey area, used at your own discretion (see docs/yahoo.md).",
+)
+API_LONG_TERM = (
+    "Long term, also apply for official Yahoo API access (https://sports.yahoo.com/developer/access/, 3-8 weeks; "
+    "see docs/yahoo.md) and switch with `fbm setup --yahoo-route api --yes` once approved.",
+)
+AUTO_ROUTE_GUIDE = (
+    "Recommended (free, read-only): connect through Flaim. Run `fbm setup --yahoo-route flaim --yes`, then follow "
+    "docs/flaim.md (sign up at https://flaim.app, connect Yahoo, `fbm flaim login`).",
+    "Or connect now with your own Yahoo sign-in: `fbm yahoo login` (read-only; undocumented by Yahoo and a Terms "
+    "of Service grey area, see docs/yahoo.md), pick your league and let it switch FBM to it, then `fbm yahoo check`.",
+)
+TELEGRAM_GUIDE = (
+    "Telegram alerts: create a bot with @BotFather in Telegram, then run `fbm notify setup` (it stores the bot token "
+    "and your chat id; prompted, never shown) and `fbm notify test --channel telegram` (see docs/telegram.md).",
+)
+TELEGRAM_OFFER = (
+    "Optional: lineup and injury alerts plus a daily digest on Telegram: `fbm setup --telegram --yes`, then "
+    "`fbm notify setup` (see docs/telegram.md).",
+)
+RUN_24_7_GUIDE = (
+    "Run it 24/7 on this computer (optional): either OpenClaw, which also lets you chat with your GM on Telegram "
+    "(`openclaw/install.sh`, or `openclaw/install.ps1` on Windows; see docs/openclaw.md), or without OpenClaw "
+    "`fbm automation install --mode engine-only` (deterministic jobs on the OS scheduler, no AI).",
+)
+# ---- end free mode -----------------------------------------------------------------------------------------------
 
 QUIET_HOURS_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$")
 LEAGUE_ID_RE = re.compile(r"^\d+$")
 
-# Hashtag Basketball Premium is required for a real (Yahoo) league: it is FBM's data layer there.
+# Hashtag Basketball Premium is an optional paid upgrade: FBM runs fully on its free ESPN engine without it.
+FREE_ENGINE = "Free ESPN engine (Hashtag off)"
 HASHTAG_GUIDE = (
-    "Hashtag Basketball Premium is required for your real league (FBM's projections and weekly totals). Subscribe "
-    "at https://hashtagbasketball.com/premium/ (Patreon) and import your Yahoo league in Hashtag's Premium area.",
-    "Run `fbm setup --hashtag --yes` (league id defaults to your Yahoo league's), or answer yes to the Hashtag "
-    "question in `fbm setup`.",
+    "Optional paid upgrade: Hashtag Basketball Premium (https://hashtagbasketball.com/premium/, Patreon) can become "
+    "FBM's data layer instead of the free ESPN engine. Import your Yahoo league in Hashtag's Premium area, then run "
+    "`fbm setup --hashtag --yes`. Not needed: FBM is fully supported without it.",
 )
 HASHTAG_CONNECT_GUIDE = (
     "Connect Hashtag: `fbm hashtag login` (sign in once in the browser window it opens), then `fbm hashtag check` "
@@ -92,9 +134,14 @@ class SetupOptions:
     skip_data: bool = False
     yahoo_approved: bool = False
     yahoo_web_session: bool = False  # interactive setup: connect now via `fbm yahoo login`
-    hashtag: bool | None = None  # [hashtag] enabled (Hashtag Basketball Premium data layer; real league only)
+    hashtag: bool | None = None  # [hashtag] enabled (optional paid data layer; real league only)
     hashtag_league_id: str | None = None  # [hashtag] league_id (default: the Yahoo league id)
     hashtag_login: bool = False  # interactive setup: run `fbm hashtag login` + check + import after setup
+    yahoo_route: str | None = None  # [yahoo] route: auto | flaim | session | api
+    telegram: bool | None = None  # add/remove "telegram" in [notify] channels
+    telegram_chat_id: str | None = None  # [notify] telegram_chat_id (for `fbm notify setup`)
+    flaim_login: bool = False  # interactive setup: run `fbm flaim login` (+ league select) after setup
+    notify_setup: bool = False  # interactive setup: run `fbm notify setup` after setup
 
     def updates(self) -> dict[tuple[str, str], Any]:
         mapping = {
@@ -111,8 +158,32 @@ class SetupOptions:
             ("proposals", "expiry_hours"): self.expiry_hours,
             ("hashtag", "enabled"): self.hashtag,
             ("hashtag", "league_id"): self.hashtag_league_id,
+            ("yahoo", "route"): self.yahoo_route,
+            ("notify", "telegram_chat_id"): self.telegram_chat_id,
         }
         return {k: v for k, v in mapping.items() if v is not None}
+
+
+def effective_channels(notify: dict[str, Any]) -> list[str]:
+    """Enabled notification channels as FBM reads [notify]: `channels`, else ["email"] when email_enabled."""
+    channels = notify.get("channels")
+    if isinstance(channels, list):
+        return [str(c) for c in channels]
+    return ["email"] if notify.get("email_enabled") else []
+
+
+def notify_channels(notify: dict[str, Any], telegram: bool | None, email: bool | None) -> list[str] | None:
+    """[notify] channels after --telegram/--email (None = leave the file alone). Starts from the effective channels;
+    existing order is kept and telegram goes first."""
+    if telegram is None and not (isinstance(notify.get("channels"), list) and email is not None):
+        return None
+    channels = effective_channels(notify)
+    if telegram and "telegram" not in channels:
+        channels.insert(0, "telegram")
+    if email and "email" not in channels:
+        channels.append("email")
+    drop = {name for name, on in (("telegram", telegram), ("email", email)) if on is False}
+    return [c for c in channels if c not in drop]
 
 
 # ---------------------------------------------------------------- validation
@@ -187,6 +258,8 @@ def validate(opts: SetupOptions) -> list[str]:
         errors.append("--hashtag-league-id must be the numeric league id (e.g. 30273)")
     if opts.hashtag and opts.league_source == "demo":
         errors.append("--hashtag needs your real Yahoo league (the demo league runs on FBM's ESPN engine)")
+    if opts.yahoo_route is not None and opts.yahoo_route not in YAHOO_ROUTES:
+        errors.append(f"--yahoo-route must be one of {', '.join(YAHOO_ROUTES)}")
     return errors
 
 
@@ -257,8 +330,11 @@ def merged_settings(existing_text: str | None, opts: SetupOptions) -> dict[str, 
         for sec, kv in tomllib.loads(existing_text).items():
             if isinstance(kv, dict):
                 values[sec] = dict(kv)
+    channels = notify_channels(values.get("notify", {}), opts.telegram, opts.email)
     for (sec, key), value in opts.updates().items():
         values.setdefault(sec, {})[key] = value
+    if channels is not None:
+        values.setdefault("notify", {})["channels"] = channels
     return values
 
 
@@ -432,18 +508,36 @@ def run_automation_install(runner: Runner, mode: str, jobs: Sequence[str], dry_r
     return run_optional(runner, "Automation", args, f"{mode}: {', '.join(jobs) or 'default jobs'}")
 
 
-def yahoo_status(source: str, approved: bool, league_toml: Path) -> list[StepResult]:
+_ROUTE_PENDING = {
+    "flaim": "using the demo league until you connect Yahoo through Flaim (`fbm flaim login`)",
+    "session": "using the demo league until you sign in with `fbm yahoo login`",
+    "api": "using the demo league until Yahoo API access is approved (`fbm auth`)",
+    "auto": "using the demo league until Yahoo API access is approved or `fbm yahoo login`",
+}
+
+
+def yahoo_status(source: str, approved: bool, league_toml: Path, route: str = "auto") -> list[StepResult]:
+    via = f" via {ROUTE_LABELS[route]}" if route in ROUTE_LABELS else ""
     if source == "yahoo" and league_toml.exists():
-        return [StepResult("Yahoo league", OK, "connected (config/league.toml)")]
+        return [StepResult("Yahoo league", OK, f"connected{via} (config/league.toml)")]
     if source == "yahoo":
         return [StepResult("Yahoo league", PENDING, "source is yahoo but no league selected: run `fbm league select`")]
     if approved:
         return [StepResult("Yahoo league", PENDING, "access approved: follow the Yahoo steps below")]
-    return [
-        StepResult(
-            "Yahoo league", PENDING, "using the demo league until Yahoo API access is approved or `fbm yahoo login`"
+    return [StepResult("Yahoo league", PENDING, _ROUTE_PENDING.get(route, _ROUTE_PENDING["auto"]))]
+
+
+def secret_store_status() -> StepResult:
+    """Where secrets live: the OS keyring, or FBM's file store on machines without one (fbm.credentials)."""
+    from fbm import credentials
+
+    if credentials.backend() == credentials.KEYRING and not credentials.keyring_usable():
+        return StepResult(
+            "Secret store",
+            FAIL,
+            f"{credentials.BACKEND_ENV}=keyring but no OS keyring is usable: unlock/install one or unset the variable",
         )
-    ]
+    return StepResult("Secret store", OK, credentials.describe())
 
 
 def run_health(runner: Runner) -> StepResult:
@@ -473,16 +567,17 @@ def _hashtag_health() -> Any:
 def hashtag_status(
     values: dict[str, dict[str, Any]], league_toml: Path, health: Callable[[], Any] | None = None
 ) -> StepResult:
-    """Hashtag Basketball Premium: required data layer for a real league (SKIP for the demo league)."""
+    """Data layer: FBM's free ESPN engine (Hashtag off; OK for a real league) or the optional Hashtag Basketball
+    Premium upgrade (checked for health). SKIP for the demo league."""
     source = values.get("league", {}).get("source", "demo")
     ht = values.get("hashtag", {})
     enabled = bool(ht.get("enabled"))
     if source != "yahoo":
         if enabled:
             return StepResult("Hashtag", FAIL, "enabled but the league is the demo: set `[hashtag] enabled = false`")
-        return StepResult("Hashtag", SKIP, "demo league runs on FBM's ESPN engine; required once you connect Yahoo")
+        return StepResult("Hashtag", SKIP, "demo league runs on FBM's free ESPN engine")
     if not enabled:
-        return StepResult("Hashtag", PENDING, "required for your real league: `fbm setup --hashtag` (see below)")
+        return StepResult("Hashtag", OK, FREE_ENGINE)
     league_id = str(ht.get("league_id") or "")
     if not league_id:
         guess = default_hashtag_league_id(league_toml)
@@ -508,21 +603,42 @@ class SetupReport:
     def failed(self) -> bool:
         return any(r.status == FAIL for r in self.results)
 
+    def _yahoo_steps(self) -> list[str]:
+        route = str(self.settings.get("yahoo", {}).get("route") or "auto")
+        approved = any(r.step == "Yahoo league" and r.detail.startswith("access approved") for r in self.results)
+        if route == "api" or approved:
+            return list(YAHOO_GUIDE)
+        if route == "flaim":
+            return [*FLAIM_GUIDE, *API_LONG_TERM]
+        if route == "session":
+            return [*SESSION_ROUTE_GUIDE, *API_LONG_TERM]
+        return [*AUTO_ROUTE_GUIDE, *API_LONG_TERM]
+
     def next_steps(self) -> list[str]:
         steps: list[str] = []
         source = self.settings.get("league", {}).get("source", "demo")
+        notify = self.settings.get("notify", {})
         if any(r.status == FAIL for r in self.results):
             steps.append("Fix the FAIL steps above, then re-run `fbm setup --check`.")
-        if source != "yahoo" or any(r.step == "Yahoo league" and r.status == PENDING for r in self.results):
-            steps.extend(YAHOO_SESSION_GUIDE)
-            steps.extend(YAHOO_GUIDE)
+        connected = source == "yahoo" and not any(
+            r.step == "Yahoo league" and r.status == PENDING for r in self.results
+        )
+        if not connected:
+            steps.extend(self._yahoo_steps())
         hashtag = next((r for r in self.results if r.step == "Hashtag"), None)
-        if source == "yahoo" and not self.settings.get("hashtag", {}).get("enabled"):
-            steps.extend(HASHTAG_GUIDE)
-        elif hashtag is not None and hashtag.status == PENDING:
+        if hashtag is not None and hashtag.status == PENDING and self.settings.get("hashtag", {}).get("enabled"):
             steps.extend(HASHTAG_CONNECT_GUIDE)
-        if self.settings.get("notify", {}).get("email_enabled"):
+        channels = effective_channels(notify)
+        if "telegram" in channels:
+            steps.extend(TELEGRAM_GUIDE)
+        if notify.get("email_enabled"):
             steps.append("Run `fbm notify setup` to store the Gmail app password (prompted, never shown).")
+        if not channels:
+            steps.extend(TELEGRAM_OFFER)
+        if self.settings.get("automation", {}).get("mode", "none") == "none":
+            steps.extend(RUN_24_7_GUIDE)
+        if connected and not self.settings.get("hashtag", {}).get("enabled"):
+            steps.extend(HASHTAG_GUIDE)
         steps.append(
             "Open your AI agent in this folder (restart it so it picks up the FBM agent files) and ask: "
             '"Open the GM office".'
@@ -545,6 +661,7 @@ def check(
     agent = values.get("agent", {}).get("name", "generic")
     report = SetupReport(settings=values)
     report.results.extend(check_prerequisites(agent, which))
+    report.results.append(secret_store_status())
     report.results.append(
         StepResult("Settings", OK, _rel(settings_path))
         if settings_path.exists()
@@ -557,7 +674,8 @@ def check(
     )
     report.results.append(run_optional(runner, "Agent files", ["agent", "status"], "see `fbm agent status`"))
     source = values.get("league", {}).get("source", "demo")
-    report.results.extend(yahoo_status(source, False, league_toml or LEAGUE_CONFIG_PATH))
+    route = str(values.get("yahoo", {}).get("route") or "auto")
+    report.results.extend(yahoo_status(source, False, league_toml or LEAGUE_CONFIG_PATH, route))
     report.results.append(hashtag_status(values, league_toml or LEAGUE_CONFIG_PATH, hashtag_health))
     report.results.append(run_health(runner))
     return report
@@ -597,6 +715,7 @@ def run_setup(
     report.settings = values or current_values(settings_path, example_path)
     agent = report.settings.get("agent", {}).get("name", "generic")
     add(*check_prerequisites(agent, which))
+    add(secret_store_status())
     add(settings_result)
     add(setup_memory(memory_dir, template_dir))
     add(*run_data(runner, opts.skip_data, False if opts.skip_data else backfilled()))
@@ -605,7 +724,8 @@ def run_setup(
     add(run_agent_install(runner, agent))
     automation = report.settings.get("automation", {})
     add(run_automation_install(runner, automation.get("mode", "none"), automation.get("jobs", [])))
-    add(*yahoo_status(source, opts.yahoo_approved, league_toml))
+    route = str(report.settings.get("yahoo", {}).get("route") or "auto")
+    add(*yahoo_status(source, opts.yahoo_approved, league_toml, route))
     add(hashtag_status(report.settings, league_toml, hashtag_health))
     add(run_health(runner))
     return report

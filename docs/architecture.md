@@ -21,8 +21,8 @@
  └──────┬──────────────────┬────────────────────┬───────────────┬────────────┘
         ▼                  ▼                    ▼               ▼
   Hashtag Basketball   ESPN public JSON    Yahoo Fantasy     local state (gitignored)
-  Premium (required    (schedule, box      (league data,     memory/ reports/ data/ config/
-  for a real league;   scores, injuries,   daily lineups,    secrets → OS credential store
+  Premium (optional    (schedule, box      (league data,     memory/ reports/ data/ config/
+  paid upgrade;        scores, injuries,   daily lineups,    secrets → OS credential store
   projections, H2H     news)               final results;
   totals, waiver wire,                     read-only)
   trade ideas, notes)
