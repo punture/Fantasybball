@@ -39,9 +39,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh    # uv (or: brew install uv)
 **Linux (desktop or headless)**
 
 ```sh
-sudo apt install -y git curl     # Debian/Ubuntu; Fedora: sudo dnf install -y git curl
+sudo apt install -y git curl cron   # Debian/Ubuntu; Fedora: sudo dnf install -y git curl cronie && sudo systemctl enable --now crond
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
+
+cron runs the engine-only schedule (step 8B); minimal installs often lack it. You can skip it if OpenClaw will run
+the schedule (step 8A).
 
 Close the terminal and open a new one, then check both work: `git --version` and `uv --version`.
 
@@ -68,8 +71,9 @@ It asks one question at a time; press Enter to accept the value in brackets. Sug
 |---|---|
 | AI agent | the agent you will chat with (`generic` if none) |
 | Models | Enter (your agent's defaults) |
-| Time zone | your own, e.g. `America/New_York` (Yahoo game days stay US/Eastern regardless) |
+| Time zone | your own, e.g. `America/New_York`: FBM shows times in it (Yahoo game days stay US/Eastern, and scheduled jobs run at US/Eastern times on the computer's own clock, whatever its time zone) |
 | Schedule | `none` if you will install OpenClaw (step 8A), else `engine-only` |
+| Jobs (asked for `engine-only`) | Enter: all five engine jobs (data sync, lineup and injury alerts, daily digest, Monday preview, health) |
 | How FBM reads Yahoo | `flaim` |
 | Telegram alerts | yes |
 | Email | no (optional) |
@@ -77,7 +81,10 @@ It asks one question at a time; press Enter to accept the value in brackets. Sug
 The same thing in one line, without questions:
 
 ```sh
+# Engine-only schedule (step 8B):
 uv run fbm setup --yes --yahoo-route flaim --telegram --no-hashtag --no-email --automation engine-only
+# OpenClaw will run the schedule (step 8A):
+uv run fbm setup --yes --yahoo-route flaim --telegram --no-hashtag --no-email --automation none
 ```
 
 Setup writes `config/settings.toml`, creates your local `memory/` folder, downloads NBA data (step 5), generates
@@ -182,7 +189,9 @@ powershell -ExecutionPolicy Bypass -File openclaw\install.ps1  # Windows
 ```
 
 Follow [openclaw.md](openclaw.md). With OpenClaw, list both `"openclaw"` and `"telegram"` in `[notify] channels`:
-FBM tries OpenClaw first and falls back to sending to Telegram directly.
+FBM tries OpenClaw first and falls back to sending to Telegram directly. If you installed the engine-only schedule
+before, remove it so nothing arrives twice: `uv run fbm automation remove`, then
+`uv run fbm setup --automation none --skip-data --yes` (the installer reminds you).
 
 **B. Engine-only schedule** (no AI, nothing else to install). The OS scheduler (Task Scheduler on Windows, launchd on
 macOS, cron on Linux) runs FBM's deterministic jobs: data sync, lineup checks, health, and the alert and digest jobs
@@ -194,6 +203,12 @@ uv run fbm automation install --mode engine-only --dry-run
 uv run fbm automation install --mode engine-only
 uv run fbm automation list
 ```
+
+The scheduler runs on the computer's own clock, so `fbm automation install` converts the US/Eastern job times to the
+computer's time zone, not yours (on a UTC server the 10:00 ET lineup checks read 15:00), and says so when the two
+differ. After a daylight-saving change, run `uv run fbm automation install` again: `uv run fbm health` warns
+(*Scheduled jobs*) when it's due. When a health check FAILs (for example the Flaim sign-in lapsed), the health job
+messages you, at most once a day per problem, and the daily digest still arrives, built from the last league read.
 
 **Either way, keep the computer awake and signed in.** Scheduled jobs only run while the computer is on.
 
@@ -222,7 +237,8 @@ uv run fbm automation list
   move in Yahoo, then tell the GM (or `uv run fbm proposals done P-12`). The next Yahoo read verifies it.
 - **Unapproved proposals expire** (18 hours by default), so stale advice never lingers.
 - **Glance at the daily digest**: matchup odds, injuries, and anything that needs you.
-- Run `uv run fbm health` now and then, or let the scheduled health job warn you.
+- Run `uv run fbm health` now and then. The scheduled health job messages you when a check FAILs (engine-only: at
+  most once a day per problem; OpenClaw: its failure alert). WARNs show up in the digest's Health section.
 
 ## Other ways to reach Yahoo
 
@@ -258,6 +274,8 @@ Your settings, memory, data and secrets are gitignored, so updates never overwri
 | No Telegram messages | Send your bot a message first, re-run `uv run fbm notify setup` (token typo?), then `uv run fbm notify test --channel telegram`. |
 | An alert command prints `NO_REPLY` | Nothing new to report since the last alert. That's expected. |
 | `fbm health`: ESPN data stale | `uv run fbm data sync`; check the computer didn't sleep. |
+| "crontab not found" from `fbm setup` or `fbm automation` | Install cron (step 1): `sudo apt install -y cron`, or on Fedora `sudo dnf install -y cronie && sudo systemctl enable --now crond`. Then `uv run fbm automation install`. |
+| `fbm health`: Scheduled jobs WARN or FAIL | `uv run fbm automation install`: daylight saving changed since the install, or an older FBM installed the jobs in your time zone instead of the computer's. |
 | `fbm health`: League categories WARN/FAIL | Your league uses a category FBM can't model (see step 4). FBM ignores it; weigh it yourself. |
 | Setup still shows the demo league | `uv run fbm setup --league-source yahoo --yes` after connecting (step 4). |
 | Want to start over | Delete `config/settings.toml` and run `uv run fbm setup` (your `memory/` and `data/` stay). |

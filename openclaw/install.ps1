@@ -75,6 +75,8 @@ $TestMessage = 'FBM is connected to OpenClaw. Scheduled posts arrive in this cha
 $JobTable = @(
     @{ Name = 'fbm:data-sync'; Cron = '0 3 * * *'; Delivery = 'none'; Timeout = 1800; Run = 'data sync' }
     @{ Name = 'fbm:health'; Cron = '30 3 * * *'; Delivery = 'none'; Timeout = 600; Run = 'health' }
+    @{ Name = 'fbm:snapshot'; Cron = '0 4 * * *'; Delivery = 'none'; Timeout = 600; Run = 'snapshot' }
+    @{ Name = 'fbm:weekly-retro'; Cron = '0 5 * * 1'; Delivery = 'none'; Timeout = 900; Run = 'learn retro' }
     @{ Name = 'fbm:morning-digest'; Cron = '30 8 * * *'; Delivery = 'announce'; Timeout = 600; Run = 'digest --kind daily' }
     @{ Name = 'fbm:weekly-preview'; Cron = '0 8 * * 1'; Delivery = 'announce'; Timeout = 600; Run = 'digest --kind weekly' }
     @{ Name = 'fbm:lineup-guard'; Cron = '*/15 10-23 * * *'; Delivery = 'announce'; Timeout = 300; Run = 'alert lineup' }
@@ -387,7 +389,7 @@ function Set-FailureAlert {
     Write-Step 'Failure alerts'
     if ($script:OcFound -and ((Invoke-Native $script:OcExe @('config', 'get', 'cron.failureAlert', '--json') -NoStderr).Code -eq 0)) {
         if ((Get-OpenClawConfig 'cron.failureAlert.enabled') -eq 'false') {
-            Write-Warn 'cron.failureAlert is set but disabled (enabled: false): a failing fbm:health or fbm:data-sync won''t alert you. Left unchanged.'
+            Write-Warn 'cron.failureAlert is set but disabled (enabled: false): a failing fbm:health, fbm:snapshot or fbm:data-sync won''t alert you. Left unchanged.'
         } else {
             Write-Ok 'cron.failureAlert is already set; left unchanged'
         }
@@ -568,7 +570,7 @@ function Test-FbmScheduler {
     if (-not (Test-Path -LiteralPath $script:FbmBin)) { return }
     $r = Invoke-Native $script:FbmBin @('automation', 'list') -NoStderr
     if ((-not $r.Text) -or ($r.Text -match 'No FBM scheduler entries')) { return }
-    Write-Warn "FBM's own scheduler also has jobs ('fbm automation list'). To avoid duplicate runs, remove the ones OpenClaw now runs, e.g.: & '$($script:FbmBin)' automation remove --jobs data-sync,health,lineup-guard"
+    Write-Warn "FBM's own scheduler also has jobs ('fbm automation list'), so digests and alerts would arrive twice. OpenClaw now runs all of that work: remove them and keep 'fbm setup' from installing them again: & '$($script:FbmBin)' automation remove; & '$($script:FbmBin)' setup --automation none --skip-data --yes"
 }
 
 function Write-Summary {

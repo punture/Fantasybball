@@ -83,7 +83,11 @@ def _interactive(opts: wiz.SetupOptions, current: dict) -> None:
             current.get("automation", {}).get("mode", "none"),
         )
     if opts.jobs is None and opts.automation != "none":
-        existing = ",".join(current.get("automation", {}).get("jobs", [])) or "data-sync,lineup-guard,daily-gm"
+        # No stored jobs: engine-only gets every engine job (as `fbm setup --yes` does), AI modes the core three.
+        default = (
+            wiz.engine_only_jobs() if opts.automation == "engine-only" else ["data-sync", "lineup-guard", "daily-gm"]
+        )
+        existing = ",".join(current.get("automation", {}).get("jobs", []) or default)
         while True:
             jobs = wiz.parse_jobs(typer.prompt(f"Jobs ({', '.join(JOBS)})", default=existing)) or []
             if all(j in JOBS for j in jobs):

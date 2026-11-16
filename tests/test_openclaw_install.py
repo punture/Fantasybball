@@ -56,7 +56,7 @@ elif a and a[0] in missing:
     print("No such command", file=sys.stderr)
     sys.exit(2)
 elif a[:2] == ["automation", "list"]:
-    print("No FBM scheduler entries installed.")
+    print(os.environ.get("FAKE_AUTOMATION_LIST", "No FBM scheduler entries installed."))
 """
 
 EXISTING_JOBS = json.dumps(
@@ -136,6 +136,8 @@ def test_install_registers_jobs_skill_and_alerts(env: Env) -> None:
     assert set(adds) == {
         "fbm:data-sync",
         "fbm:health",
+        "fbm:snapshot",
+        "fbm:weekly-retro",
         "fbm:morning-digest",
         "fbm:weekly-preview",
         "fbm:lineup-guard",
@@ -146,12 +148,15 @@ def test_install_registers_jobs_skill_and_alerts(env: Env) -> None:
         assert _opt(argv, "--command-cwd") == str(env.repo)
         command = json.loads(_opt(argv, "--command-argv"))
         assert command[0] == str(env.fbm)
-        if name in ("fbm:data-sync", "fbm:health"):
+        if name in ("fbm:data-sync", "fbm:health", "fbm:snapshot", "fbm:weekly-retro"):
             assert "--no-deliver" in argv and "--announce" not in argv
         else:
             assert "--announce" in argv and _opt(argv, "--channel") == "telegram" and _opt(argv, "--to") == "123456"
     assert json.loads(_opt(adds["fbm:morning-digest"], "--command-argv"))[1:] == ["digest", "--kind", "daily"]
     assert json.loads(_opt(adds["fbm:lineup-guard"], "--command-argv"))[1:] == ["alert", "lineup"]
+    # What the engine-only daily-gm / weekly-retro jobs did besides the digests: Yahoo read + move verification, retro.
+    assert json.loads(_opt(adds["fbm:snapshot"], "--command-argv"))[1:] == ["snapshot"]
+    assert json.loads(_opt(adds["fbm:weekly-retro"], "--command-argv"))[1:] == ["learn", "retro"]
     assert _opt(adds["fbm:data-sync"], "--timeout-seconds") == "1800"
     assert _opt(adds["fbm:lineup-guard"], "--cron") == "*/15 10-23 * * *"
 
@@ -234,8 +239,21 @@ def test_job_selection_and_schedule_overrides(env: Env) -> None:
 def test_jobs_skipped_when_fbm_lacks_the_command(env: Env) -> None:
     r = env.run("--chat-id", "123456", "--yes", FAKE_FBM_MISSING="digest,alert")
     assert r.returncode == 0, r.stderr
-    assert {_opt(a, "--name") for a in env.argvs("cron", "add")} == {"fbm:data-sync", "fbm:health"}
+    added = {_opt(a, "--name") for a in env.argvs("cron", "add")}
+    assert added == {"fbm:data-sync", "fbm:health", "fbm:snapshot", "fbm:weekly-retro"}
     assert "no 'fbm digest' yet" in r.stderr
+
+
+def test_fbm_scheduler_warning_removes_every_job_and_the_setting(env: Env) -> None:
+    """On top of the engine-only schedule, FBM's daily-gm / weekly-retro jobs also send the digests: the advice must
+    remove all of FBM's jobs and switch [automation] to none, or `fbm setup` reinstalls them."""
+    listing = "0 9 * * * cd /r && fbm automation run daily-gm  # fbm-daily-gm"
+    r = env.run("--chat-id", "123456", "--yes", FAKE_AUTOMATION_LIST=listing)
+    assert r.returncode == 0, r.stderr
+    assert f"{env.fbm} automation remove && {env.fbm} setup --automation none --skip-data --yes" in r.stderr
+    assert "--jobs data-sync,health,lineup-guard" not in r.stderr
+    quiet = env.run("--chat-id", "123456", "--yes")
+    assert "automation remove" not in quiet.stderr
 
 
 def test_notify_channel_only_with_consent_and_uninstall_reverts(env: Env) -> None:

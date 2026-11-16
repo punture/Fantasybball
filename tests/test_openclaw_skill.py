@@ -25,6 +25,8 @@ WIN_SPACES_BIN = "C:\\Program Files\\FBM's league\\.venv\\Scripts\\fbm.exe"
 EXPECTED_JOBS = {
     "fbm:data-sync": ("0 3 * * *", "none", "data sync"),
     "fbm:health": ("30 3 * * *", "none", "health"),
+    "fbm:snapshot": ("0 4 * * *", "none", "snapshot"),  # verifies confirmed moves, syncs transactions and offers
+    "fbm:weekly-retro": ("0 5 * * 1", "none", "learn retro"),  # grades last week's decisions
     "fbm:morning-digest": ("30 8 * * *", "announce", "digest --kind daily"),
     "fbm:weekly-preview": ("0 8 * * 1", "announce", "digest --kind weekly"),
     "fbm:lineup-guard": ("*/15 10-23 * * *", "announce", "alert lineup"),
@@ -317,6 +319,22 @@ def test_installers_register_the_documented_schedule():
     assert re.findall(r'"(fbm:[a-z-]+)\|', (ROOT / "openclaw" / "install.sh").read_text(encoding="utf-8")) == list(
         EXPECTED_JOBS
     )
+
+
+@pytest.mark.parametrize(
+    ("path", "advice"),
+    [
+        ("openclaw/install.sh", "automation remove && "),
+        ("openclaw/install.ps1", "automation remove; "),
+        ("docs/openclaw.md", "`uv run fbm automation remove`, then "),
+    ],
+)
+def test_duplicate_schedule_advice_removes_every_fbm_job(path, advice):
+    """FBM's own daily-gm / weekly-retro jobs send the digests too: removing only data-sync,health,lineup-guard left
+    every digest doubled, and [automation] still engine-only made `fbm setup` reinstall the rest."""
+    text = (ROOT / path).read_text(encoding="utf-8")
+    assert advice in text and "setup --automation none --skip-data --yes" in text
+    assert "--jobs data-sync,health,lineup-guard" not in text
 
 
 @pytest.mark.parametrize("doc", ["docs/openclaw.md", "openclaw/README.md"])

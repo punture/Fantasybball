@@ -199,9 +199,10 @@ def valid_timezone(name: str) -> bool:
     return True
 
 
-def detect_timezone() -> str:
-    """Best-effort local IANA zone; "UTC" when it can't be determined."""
-    env = os.environ.get("TZ", "")
+def detect_timezone(use_env: bool = True) -> str:
+    """Best-effort local IANA zone; "UTC" when it can't be determined. use_env=False ignores TZ and reads the
+    system zone (the one OS schedulers fire in)."""
+    env = os.environ.get("TZ", "") if use_env else ""
     if valid_timezone(env):
         return env
     if sys.platform == "win32":

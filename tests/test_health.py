@@ -165,3 +165,86 @@ def test_gather_with_temp_db(tmp_path, monkeypatch):
 @pytest.mark.parametrize("statuses,expected", [(["OK"], "OK"), (["OK", "WARN"], "WARN"), (["WARN", "FAIL"], "FAIL")])
 def test_overall(statuses, expected):
     assert health.overall([{"status": s} for s in statuses]) == expected
+
+
+# ------------------------------------------------------------------ OS-scheduled jobs on the computer's clock
+
+UTC_NOV, LA_NOV = 300, -180  # minutes ahead of ET in November: a UTC box, an owner in Los Angeles
+
+
+def test_schedule_check_catches_entries_on_the_wrong_clock():
+    assert health.check_schedule("none", {}, UTC_NOV, LA_NOV) == []
+    assert health.check_schedule("agent-app", {}, UTC_NOV, LA_NOV) == []
+    # Installed by an older FBM in the owner's zone on a UTC box: lineup alerts miss every tip-off.
+    [old] = health.check_schedule("engine-only", {}, UTC_NOV, LA_NOV)
+    assert old["status"] == "FAIL" and "8h" in old["detail"] and "fbm automation install" in old["fix"]
+    [same] = health.check_schedule("engine-only", {}, LA_NOV, LA_NOV)
+    assert same["status"] == "WARN" and "no install record" in same["detail"]
+    # Installed in July (EDT) on the UTC box, checked in November (EST): an hour off until re-installed.
+    summer = {"lineup-guard": {"zone": "UTC", "offset_min": 240}, "health": {"zone": "UTC", "offset_min": 300}}
+    [drift] = health.check_schedule("scheduler", summer, UTC_NOV, LA_NOV)
+    assert drift["status"] == "WARN" and drift["detail"].startswith("lineup-guard:") and "1h off" in drift["detail"]
+    [ok] = health.check_schedule("engine-only", {"health": {"zone": "UTC", "offset_min": 300}}, UTC_NOV, LA_NOV)
+    assert ok["status"] == "OK" and "UTC" in ok["detail"]
+
+
+def test_schedule_checks_read_the_computers_zone_and_never_crash(monkeypatch):
+    from fbm import automation
+
+    monkeypatch.setattr(automation, "scheduler_timezone", lambda: "Etc/UTC")
+    monkeypatch.setattr(automation, "read_install_record", lambda: {})
+    day = date(2026, 11, 16)
+    assert health._schedule_checks("none", "America/Los_Angeles", day) == []
+    [row] = health._schedule_checks("engine-only", "America/Los_Angeles", day)
+    assert row["status"] == "FAIL"
+    [bad] = health._schedule_checks("engine-only", "Not/AZone", day)
+    assert bad["status"] == "WARN" and "not checked" in bad["detail"]
+
+
+def test_fail_alert_lists_only_the_fail_rows():
+    checks = [
+        health.result("Yahoo access", "FAIL", "Flaim route, not signed in", "`fbm flaim login`"),
+        health.result("ESPN news", "WARN", "30h old"),
+        health.result("Storage", "FAIL", "data/fbm.db missing"),
+    ]
+    subject, body, names = health.fail_alert(checks)
+    assert subject == "FBM health: 2 check(s) FAIL" and names == ["Storage", "Yahoo access"]
+    assert "- Yahoo access: Flaim route, not signed in Fix: `fbm flaim login`" in body
+    assert "- Storage: data/fbm.db missing\n" in body and "ESPN news" not in body
+
+
+def test_health_notify_on_fail_messages_once_a_day(monkeypatch, tmp_path):
+    """The engine-only health job (`fbm health --notify-on-fail`) must tell the owner about a FAIL (e.g. a lapsed
+    Flaim sign-in) instead of only writing a log nobody reads; the same failures are messaged once a day."""
+    from typer.testing import CliRunner
+
+    from fbm.cli import app
+    from fbm.gm import services as svc
+    from fbm.notify import dispatch
+
+    conn = db.connect(tmp_path / "fbm.db")
+    report = {"overall": "FAIL", "phase": "regular", "checks": [health.result("Yahoo access", "FAIL", "lapsed")]}
+    sent = []
+    monkeypatch.setattr(svc, "health_check", lambda: report)
+    monkeypatch.setattr(db, "connect", lambda *a, **k: conn)
+    monkeypatch.setattr(
+        dispatch, "send", lambda subject, body, kind, **k: sent.append((subject, body, kind)) or {"status": "sent"}
+    )
+    runner = CliRunner()
+    assert runner.invoke(app, ["health"]).exit_code == 1 and sent == []  # plain `fbm health` never messages
+    r = runner.invoke(app, ["health", "--notify-on-fail"])
+    assert r.exit_code == 1 and "Health alert: sent" in r.output
+    assert sent[0][0] == "FBM health: 1 check(s) FAIL" and "Yahoo access: lapsed" in sent[0][1]
+    assert sent[0][2] == "report"  # silent and held in quiet hours: not a 3 a.m. ring
+    assert runner.invoke(app, ["health", "--notify-on-fail"]).exit_code == 1 and len(sent) == 1  # once a day
+    report["checks"].append(health.result("Storage", "FAIL", "data/fbm.db missing"))
+    assert runner.invoke(app, ["health", "--notify-on-fail"]).exit_code == 1 and len(sent) == 2  # new failure
+
+    def down(*a, **k):
+        raise RuntimeError("telegram down")
+
+    report["checks"].append(health.result("ESPN news", "FAIL", "stale"))
+    monkeypatch.setattr(dispatch, "send", down)
+    r = runner.invoke(app, ["health", "--notify-on-fail"])
+    assert r.exit_code == 1 and "Health alert not sent: RuntimeError" in r.output  # still exit 1, no traceback
+    conn.close()

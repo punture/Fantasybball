@@ -1,9 +1,10 @@
 """Scheduled FBM jobs: a job catalog in ET semantics, per-agent headless commands, and thin OS scheduler backends.
 
 Design:
-- Job times are defined in US/Eastern (NBA game days) and converted to the owner's time zone at install time for
-  the *current* date. OS schedulers (Task Scheduler, launchd, cron) run in machine-local time, so after a DST change
-  in either zone re-run `fbm automation install` (the installer prints the next transition date).
+- Job times are defined in US/Eastern (NBA game days). OS schedulers (Task Scheduler, launchd, cron) fire in the
+  computer's own time zone, so install converts them to that zone (not the owner's, which is for display only) for
+  the *current* date. After a DST change in either zone re-run `fbm automation install`: the installer prints the
+  next transition date, and `fbm health` warns when installed entries no longer match US/Eastern (install record).
 - Every scheduler entry calls one entry point: `<python> -m fbm.cli automation run JOB` with the repo as working dir.
 - Engine-only mode (free, no AI) can run on a denser schedule than the AI modes: lineup-guard checks every 15 minutes
   and only messages the owner when a lineup alert or injury update is due (`fbm alert ...`, NO_REPLY otherwise).
@@ -15,6 +16,7 @@ Pure planning/rendering functions are unit-tested; functions that touch the OS a
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import shutil
@@ -25,6 +27,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from xml.sax.saxutils import escape
 from zoneinfo import ZoneInfo
 
@@ -34,6 +37,7 @@ from fbm.settings import AGENTS, AUTOMATION_MODES, JOBS, Settings
 
 ET = ZoneInfo("America/New_York")
 LOG_DIR = PROJECT_ROOT / "reports" / "automation"
+INSTALL_RECORD = LOG_DIR / "installed.json"  # job -> the zone and ET offset its scheduler entry was computed for
 TASK_FOLDER = "\\FBM\\"
 LAUNCHD_PREFIX = "com.fbm."
 CRON_BEGIN = "# >>> FBM automation (managed by `fbm automation`; do not edit) >>>"
@@ -123,7 +127,14 @@ CATALOG: dict[str, Job] = {
             "gm",
             (),
         ),
-        Job("health", "Daily system health check.", (Trigger(3, 30),), "health", "routine", (("health",),)),
+        Job(
+            "health",
+            "Daily system health check (engine-only: messages you the FAIL checks, at most once a day).",
+            (Trigger(3, 30),),
+            "health",
+            "routine",
+            (("health", "--notify-on-fail"),),
+        ),
     )
 }
 assert tuple(CATALOG) == JOBS
@@ -169,37 +180,62 @@ def describe_triggers(triggers: Sequence[Trigger]) -> str:
     return "; ".join(parts)
 
 
-def convert_trigger(t: Trigger, owner_tz: str, on: date | None = None) -> Trigger:
-    """Convert an ET trigger to owner-local wall time using the UTC offsets in effect on `on` (default: today ET)."""
+def _zone(tz: str | None) -> ZoneInfo | None:
+    """An IANA zone, or None for this computer's local time (datetime.astimezone(None))."""
+    return ZoneInfo(tz) if tz else None
+
+
+def scheduler_timezone() -> str | None:
+    """The zone OS schedulers fire in: the computer's system zone (cron, launchd and Task Scheduler ignore a shell's
+    TZ). None stands for this process's local time, which is that zone whenever TZ is unset."""
+    if not os.environ.get("TZ"):
+        return None
+    from fbm.setup_wizard import detect_timezone
+
+    return detect_timezone(use_env=False)
+
+
+def zone_label(tz: str | None) -> str:
+    """A zone's name for messages: the IANA name, else this computer's zone name (e.g. "UTC", "CET")."""
+    return tz or datetime.now().astimezone().tzname() or "local time"
+
+
+def convert_trigger(t: Trigger, tz: str | None, on: date | None = None) -> Trigger:
+    """Convert an ET trigger to wall time in `tz` (None: this computer's local time) using the UTC offsets in effect
+    on `on` (default: today ET)."""
     ref = on or datetime.now(ET).date()
     et_dt = datetime(ref.year, ref.month, ref.day, t.hour, t.minute, tzinfo=ET)
-    local = et_dt.astimezone(ZoneInfo(owner_tz))
+    local = et_dt.astimezone(_zone(tz))
     shift = (local.date() - et_dt.date()).days
     days = tuple(sorted({(d - 1 + shift) % 7 + 1 for d in t.days}))
     return Trigger(local.hour, local.minute, days)
 
 
-def owner_triggers(job: str, owner_tz: str, on: date | None = None, mode: str | None = None) -> tuple[Trigger, ...]:
+def owner_triggers(job: str, tz: str | None, on: date | None = None, mode: str | None = None) -> tuple[Trigger, ...]:
+    """A job's ET triggers as wall times in `tz`: the owner's zone for display, the scheduler's zone to install."""
     seen: list[Trigger] = []
     for t in CATALOG[job].triggers(mode):
-        c = convert_trigger(t, owner_tz, on)
+        c = convert_trigger(t, tz, on)
         if c not in seen:
             seen.append(c)
     return tuple(seen)
 
 
-def next_offset_change(owner_tz: str, start: date | None = None, horizon_days: int = 400) -> date | None:
-    """First date after `start` on which the ET<->owner wall-clock offset changes (DST in either zone)."""
+def et_offset_minutes(tz: str | None, on: date) -> int:
+    """Minutes `tz` (None: this computer's local time) is ahead of US/Eastern at noon ET on `on`."""
+    noon = datetime(on.year, on.month, on.day, 12, tzinfo=ET)
+    local, et = noon.astimezone(_zone(tz)).utcoffset(), noon.utcoffset()
+    assert local is not None and et is not None
+    return int((local - et).total_seconds()) // 60
+
+
+def next_offset_change(tz: str | None, start: date | None = None, horizon_days: int = 400) -> date | None:
+    """First date after `start` on which the ET<->`tz` wall-clock offset changes (DST in either zone)."""
     start = start or datetime.now(ET).date()
-
-    def offset(d: date) -> timedelta:
-        noon = datetime(d.year, d.month, d.day, 12, tzinfo=ET)
-        return noon.astimezone(ZoneInfo(owner_tz)).utcoffset() - noon.utcoffset()
-
-    base = offset(start)
+    base = et_offset_minutes(tz, start)
     for i in range(1, horizon_days):
         d = start + timedelta(days=i)
-        if offset(d) != base:
+        if et_offset_minutes(tz, d) != base:
             return d
     return None
 
@@ -369,6 +405,8 @@ def run_job(
     """Run one job with a per-job lock; log to reports/automation/<job>-<UTC>.log. Returns (exit code, log path).
 
     Exit codes: 0 ok, 2 invalid job/config, 3 skipped (another run active), else the first failing command's code.
+    Every command runs even after a failure: they are independent (a failed snapshot still sends the digest, built
+    from the last snapshot with the failure in its Health section).
     """
     mode = mode or s.automation_mode
     if job not in CATALOG:
@@ -397,9 +435,8 @@ def run_job(
                 rc, out = runner(cmd, PROJECT_ROOT)
                 f.write(out if out.endswith("\n") or not out else out + "\n")
                 f.write(f"exit={rc}\n")
-                if rc != 0:
+                if rc != 0 and code == 0:
                     code = rc
-                    break
             f.write(f"end={datetime.now(UTC).isoformat()} result={code}\n")
     finally:
         lock.unlink(missing_ok=True)
@@ -544,14 +581,16 @@ def detect_backend() -> str:
     return {"Windows": "schtasks", "Darwin": "launchd"}.get(platform.system(), "cron")
 
 
-def plan_entries(s: Settings, jobs: Sequence[str], mode: str, on: date | None = None) -> list[Entry]:
+def plan_entries(
+    s: Settings, jobs: Sequence[str], mode: str, on: date | None = None, tz: str | None = None
+) -> list[Entry]:
+    """Scheduler entries: each job's ET triggers as wall times in the scheduler's zone `tz` (None: this computer's
+    local time, which OS schedulers fire in; see scheduler_timezone). The owner's time zone is for display only."""
     entries = []
     for job in jobs:
         if mode == "engine-only" and not CATALOG[job].engine_commands:
             continue  # AI-only job (trade-scan)
-        entries.append(
-            Entry(job, owner_triggers(job, s.owner_timezone, on, mode), tuple(fbm_command("automation", "run", job)))
-        )
+        entries.append(Entry(job, owner_triggers(job, tz, on, mode), tuple(fbm_command("automation", "run", job))))
     return entries
 
 
@@ -606,8 +645,29 @@ def launchd_path(job: str) -> Path:
     return Path.home() / "Library" / "LaunchAgents" / f"{LAUNCHD_PREFIX}{job}.plist"
 
 
+BACKEND_COMMANDS = {"cron": "crontab", "launchd": "launchctl", "schtasks": "schtasks"}
+_MISSING_HINTS = {
+    "crontab": "crontab not found: install cron, then run this again (Debian/Ubuntu: sudo apt install -y cron; "
+    "Fedora: sudo dnf install -y cronie && sudo systemctl enable --now crond; Arch: sudo pacman -S cronie && "
+    "sudo systemctl enable --now cronie)",
+}
+
+
+class SchedulerUnavailable(RuntimeError):
+    """The OS scheduler's command isn't installed (e.g. no cron on a minimal Linux)."""
+
+
+def missing_scheduler(backend: str, which: Callable[[str], str | None] = shutil.which) -> str:
+    """Why this backend's scheduler command can't run ("" when it is on PATH)."""
+    exe = BACKEND_COMMANDS[backend]
+    return "" if which(exe) else _MISSING_HINTS.get(exe, f"{exe} not found on PATH")
+
+
 def _run(cmd: list[str], input_text: str | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, input=input_text, check=False)
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, input=input_text, check=False)
+    except FileNotFoundError:
+        raise SchedulerUnavailable(_MISSING_HINTS.get(cmd[0], f"{cmd[0]} not found on PATH")) from None
 
 
 def _read_crontab() -> str:
@@ -616,6 +676,8 @@ def _read_crontab() -> str:
 
 
 def install_entries(entries: Sequence[Entry], backend: str, workdir: Path = PROJECT_ROOT) -> list[str]:
+    """Install the entries; one message per change ("FAILED ..." on failure). Raises SchedulerUnavailable when the
+    scheduler's command is missing."""
     msgs, start = [], datetime.now(ET).date()
     if backend == "schtasks":
         LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -676,3 +738,44 @@ def remove_installed(backend: str, jobs: Sequence[str] = JOBS) -> list[str]:
             p = _run(["crontab", "-"], merge_crontab(current, keep))
             msgs.append(f"crontab: {'updated' if p.returncode == 0 else 'FAILED ' + p.stderr.strip()}")
     return msgs
+
+
+# ---------------------------------------------------------------- install record (read by `fbm health`)
+
+
+def read_install_record(path: Path | None = None) -> dict[str, dict[str, Any]]:
+    """job -> {zone, offset_min, installed_on}: what each installed entry's wall times were computed for."""
+    try:
+        data = json.loads((path or INSTALL_RECORD).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {str(k): v for k, v in data.items() if isinstance(v, dict)} if isinstance(data, dict) else {}
+
+
+def _write_install_record(record: dict[str, dict[str, Any]], path: Path) -> None:
+    if not record:
+        path.unlink(missing_ok=True)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def save_install_record(
+    entries: Sequence[Entry], tz: str | None, on: date | None = None, path: Path | None = None
+) -> None:
+    """After a successful install: remember the zone and ET offset each entry's wall times were computed for."""
+    today = on or datetime.now(ET).date()
+    path = path or INSTALL_RECORD
+    record = read_install_record(path)
+    for e in entries:
+        record[e.job] = {
+            "zone": zone_label(tz),
+            "offset_min": et_offset_minutes(tz, today),
+            "installed_on": today.isoformat(),
+        }
+    _write_install_record(record, path)
+
+
+def forget_install_record(jobs: Sequence[str], path: Path | None = None) -> None:
+    path = path or INSTALL_RECORD
+    _write_install_record({k: v for k, v in read_install_record(path).items() if k not in jobs}, path)

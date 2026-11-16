@@ -35,6 +35,8 @@ distro and use `install.sh` there.
 |---|---|---|---|
 | `fbm:data-sync` | `0 3 * * *` | `fbm data sync` | silent |
 | `fbm:health` | `30 3 * * *` | `fbm health` | silent; failures alert you |
+| `fbm:snapshot` | `0 4 * * *` | `fbm snapshot` | silent (reads Yahoo, verifies your confirmed moves); failures alert you |
+| `fbm:weekly-retro` | `0 5 * * 1` | `fbm learn retro` | silent (grades last week's decisions) |
 | `fbm:morning-digest` | `30 8 * * *` | `fbm digest --kind daily` | daily brief |
 | `fbm:weekly-preview` | `0 8 * * 1` | `fbm digest --kind weekly` | Monday preview |
 | `fbm:lineup-guard` | `*/15 10-23 * * *` | `fbm alert lineup` | only when something changed |

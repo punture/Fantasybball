@@ -74,7 +74,7 @@ Use `--dry-run` to see exactly what would be installed.
 | `daily-gm` | daily 04:00 | `daily-gm` | gm | `fbm snapshot`, `fbm lineup` |
 | `weekly-retro` | Mon 05:00 | `weekly-retro-preview` | gm | `fbm learn retro` |
 | `trade-scan` | Tue & Fri 10:00 | `trade-scan` | gm | — (AI only) |
-| `health` | daily 03:30 | `health` | routine | `fbm health` |
+| `health` | daily 03:30 | `health` | routine | `fbm health --notify-on-fail` (messages the FAIL checks, once a day) |
 
 `uv run fbm automation jobs` prints the authoritative catalog. Each run logs to `reports/automation/`. Scheduled
 jobs only run while your computer is on.

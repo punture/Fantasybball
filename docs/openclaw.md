@@ -60,7 +60,8 @@ into that user's OpenClaw workspace and the jobs run FBM as that user. The insta
 7. Registers the jobs below, replacing older jobs with the same `fbm:*` name and leaving every other job alone.
 8. Asks whether FBM itself may also send its alerts through OpenClaw (adds `"openclaw"` to `[notify] channels`,
    with a `settings.toml.bak` backup). Answer no to leave your settings untouched: the scheduled posts don't need it.
-9. Warns if FBM's own OS scheduler (`fbm automation`) runs the same jobs, so nothing runs twice.
+9. Warns if FBM's own OS scheduler (`fbm automation`) also has jobs, and prints the commands that remove them (so
+   nothing posts twice).
 
 What it set up is recorded in `data/openclaw/install-state` (local, not committed) so uninstall removes exactly that.
 
@@ -94,6 +95,8 @@ All times are **US/Eastern** (Yahoo's NBA game days are ET dates); OpenClaw conv
 |---|---|---|---|
 | `fbm:data-sync` | `0 3 * * *` (03:00 daily) | `fbm data sync` | silent (30 min limit) |
 | `fbm:health` | `30 3 * * *` (03:30 daily) | `fbm health` | silent; a FAIL (exit 1) alerts you |
+| `fbm:snapshot` | `0 4 * * *` (04:00 daily) | `fbm snapshot` | silent: reads your league, syncs transactions and trade offers, verifies the moves you confirmed; a failure (e.g. a lapsed Flaim sign-in) alerts you |
+| `fbm:weekly-retro` | `0 5 * * 1` (Mondays 05:00) | `fbm learn retro` | silent: grades last week's decisions |
 | `fbm:morning-digest` | `30 8 * * *` (08:30 daily) | `fbm digest --kind daily` | the daily brief |
 | `fbm:weekly-preview` | `0 8 * * 1` (Mondays 08:00) | `fbm digest --kind weekly` | the week ahead |
 | `fbm:lineup-guard` | `*/15 10-23 * * *` (every 15 min, 10:00-23:45) | `fbm alert lineup` | only when the recommended lineup changed |
@@ -173,7 +176,9 @@ itself, your league data and other OpenClaw settings are untouched.
   them.
 - **The test message failed.** `openclaw channels status`; make sure you have messaged the bot first and the chat id
   is right (`/whoami`).
-- **Posts twice.** FBM's own scheduler may run the same work: `uv run fbm automation list`, then
-  `uv run fbm automation remove --jobs data-sync,health,lineup-guard`.
+- **Posts twice.** FBM's own scheduler may run the same work (its daily-gm and weekly-retro jobs also send the
+  digests): `uv run fbm automation list`, then remove all of it and keep `fbm setup` from installing it again:
+  `uv run fbm automation remove`, then `uv run fbm setup --automation none --skip-data --yes`. OpenClaw's jobs above
+  cover everything those jobs did.
 - **Older FBM.** Jobs whose command your FBM version lacks (`fbm digest`, `fbm alert`) are skipped with a warning;
   update FBM (`git pull`, `uv sync`) and re-run the installer.

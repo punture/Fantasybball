@@ -30,9 +30,9 @@ def test_lineup_guard_runs_every_15_minutes_only_in_engine_only_mode():
     assert job.triggers("scheduler") == job.et_triggers and len(job.et_triggers) == 12  # AI runs stay hourly
     assert auto.CATALOG["daily-gm"].triggers("engine-only") == auto.CATALOG["daily-gm"].et_triggers
     s = Settings(owner_timezone="America/Chicago")
-    [entry] = auto.plan_entries(s, ["lineup-guard"], "engine-only", ON)
+    [entry] = auto.plan_entries(s, ["lineup-guard"], "engine-only", ON, tz="America/Chicago")
     assert len(entry.triggers) == 56 and entry.triggers[0] == Trigger(9, 0)
-    [ai] = auto.plan_entries(s, ["lineup-guard"], "scheduler", ON)
+    [ai] = auto.plan_entries(s, ["lineup-guard"], "scheduler", ON, tz="America/Chicago")
     assert len(ai.triggers) == 12
 
 

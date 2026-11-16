@@ -401,6 +401,28 @@ def test_interactive_route_default_keeps_a_connected_league(monkeypatch):
     assert moving.yahoo_route == "flaim" and asked == ["flaim"]
 
 
+def test_interactive_jobs_default_follows_the_schedule_mode(monkeypatch):
+    """Enter at the Jobs prompt: engine-only gets every engine job (weekly preview and health included, as the
+    `fbm setup --yes --automation engine-only` one-liner does); AI modes keep the core three; stored jobs win."""
+    from fbm import cli_setup
+
+    monkeypatch.setattr(cli_setup, "_choice", lambda question, options, default: default)
+    monkeypatch.setattr(cli_setup.typer, "prompt", lambda *a, **k: k.get("default"))
+    monkeypatch.setattr(cli_setup.typer, "confirm", lambda *a, **k: False)
+    monkeypatch.setattr(cli_setup, "_ask_connect", lambda opts: None)
+    base = {"owner": {"timezone": "Asia/Tokyo"}, "league": {"source": "demo"}}
+
+    engine = wiz.SetupOptions(automation="engine-only")
+    cli_setup._interactive(engine, base)
+    assert engine.jobs == wiz.engine_only_jobs() and {"weekly-retro", "health"} <= set(engine.jobs)
+    ai = wiz.SetupOptions(automation="scheduler")
+    cli_setup._interactive(ai, base)
+    assert ai.jobs == ["data-sync", "lineup-guard", "daily-gm"]
+    kept = wiz.SetupOptions()
+    cli_setup._interactive(kept, {**base, "automation": {"mode": "engine-only", "jobs": ["health"]}})
+    assert kept.automation == "engine-only" and kept.jobs == ["health"]
+
+
 def test_interactive_connect_questions_follow_the_route(monkeypatch):
     from fbm import cli_setup
 

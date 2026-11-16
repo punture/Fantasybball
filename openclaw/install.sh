@@ -17,6 +17,8 @@ MARKER="fbm-openclaw-skill" # written into the generated SKILL.md; we only repla
 JOBS=(
   "fbm:data-sync|0 3 * * *|none|1800|data sync"
   "fbm:health|30 3 * * *|none|600|health"
+  "fbm:snapshot|0 4 * * *|none|600|snapshot"
+  "fbm:weekly-retro|0 5 * * 1|none|900|learn retro"
   "fbm:morning-digest|30 8 * * *|announce|600|digest --kind daily"
   "fbm:weekly-preview|0 8 * * 1|announce|600|digest --kind weekly"
   "fbm:lineup-guard|*/15 10-23 * * *|announce|300|alert lineup"
@@ -368,7 +370,7 @@ ensure_failure_alert() {
   step "Failure alerts"
   if [ "$OC_FOUND" = 1 ] && "$OPENCLAW" config get cron.failureAlert --json >/dev/null 2>&1; then
     if [ "$(first_line "$("$OPENCLAW" config get cron.failureAlert.enabled 2>/dev/null || true)")" = false ]; then
-      warn "cron.failureAlert is set but disabled (enabled: false): a failing fbm:health or fbm:data-sync won't alert you. Left unchanged."
+      warn "cron.failureAlert is set but disabled (enabled: false): a failing fbm:health, fbm:snapshot or fbm:data-sync won't alert you. Left unchanged."
     else
       ok "cron.failureAlert is already set; left unchanged"
     fi
@@ -525,7 +527,7 @@ check_fbm_scheduler() {
   local out
   out="$("$FBM_BIN" automation list 2>/dev/null || true)"
   case "$out" in "" | *"No FBM scheduler entries"*) return 0 ;; esac
-  warn "FBM's own OS scheduler also has jobs ('fbm automation list'). To avoid duplicate runs, remove the ones OpenClaw now runs, e.g.: $(quote "$FBM_BIN") automation remove --jobs data-sync,health,lineup-guard"
+  warn "FBM's own OS scheduler also has jobs ('fbm automation list'), so digests and alerts would arrive twice. OpenClaw now runs all of that work: remove them and keep 'fbm setup' from installing them again: $(quote "$FBM_BIN") automation remove && $(quote "$FBM_BIN") setup --automation none --skip-data --yes"
 }
 
 summary() {

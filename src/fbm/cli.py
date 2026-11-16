@@ -802,8 +802,41 @@ def waiver(
         console.print(f"[dim]Teams he'd improve: {', '.join(r['teams_likely_to_claim'])}[/]")
 
 
+def _notify_health_fail(checks: list[dict[str, str]]) -> None:
+    """Message the FAIL rows through [notify] channels, once per ET day per set of failing checks. Kind "report":
+    silent, and held during quiet hours (a broken sign-in can wait for the morning; it shouldn't ring at 3 a.m.)."""
+    from fbm.gm.health import FAIL_ALERT_KEY, fail_alert
+    from fbm.notify import dispatch
+    from fbm.notify import state as notify_state
+    from fbm.notify.base import NotifyError
+
+    subject, body, failing = fail_alert(checks)
+    marker = {"day": nba_today().isoformat(), "checks": failing}
+    try:
+        conn = store.connect()
+        if notify_state.get(conn, FAIL_ALERT_KEY) == marker:
+            console.print("Health alert already sent today for these FAIL checks.")
+            return
+        sent = dispatch.send(subject, body, "report", conn=conn)
+        if sent["status"] in ("sent", "partial", "held"):
+            notify_state.put(conn, FAIL_ALERT_KEY, marker)
+        detail = f" ({sent['detail']})" if sent.get("detail") else ""
+        console.print(f"Health alert: {sent['status']}{detail}", markup=False)
+    except NotifyError as err:  # sanitized delivery detail (never a secret)
+        console.print(f"Health alert not sent: {err}", style="red", markup=False)
+    except Exception as err:  # noqa: BLE001 - the table above is the result; report it (type only), keep exit 1
+        console.print(f"Health alert not sent: {type(err).__name__}", style="red", markup=False)
+
+
 @app.command("health")
-def health_cmd() -> None:
+def health_cmd(
+    notify_on_fail: bool = typer.Option(
+        False,
+        "--notify-on-fail",
+        help="On a FAIL, also message the FAIL checks through [notify] channels (once a day per set of failures; "
+        "the engine-only health job uses this).",
+    ),
+) -> None:
     """System health checks (OK/WARN/FAIL). Exit code 1 if any check FAILs."""
     from rich.markup import escape
 
@@ -818,6 +851,8 @@ def health_cmd() -> None:
         table.add_row(c["check"], f"[{colors[c['status']]}]{c['status']}[/]", escape(c["detail"]), escape(c["fix"]))
     console.print(table)
     if r["overall"] == "FAIL":
+        if notify_on_fail:
+            _notify_health_fail(r["checks"])
         raise typer.Exit(1)
 
 

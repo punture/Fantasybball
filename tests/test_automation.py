@@ -1,3 +1,5 @@
+import sys
+import time
 from datetime import UTC, date, datetime
 
 import pytest
@@ -122,8 +124,8 @@ def test_cron_lines_and_merge():
 
 
 def test_plan_entries_and_render(tmp_path):
-    s = Settings(owner_timezone="Asia/Manila")
-    entries = auto.plan_entries(s, ["health", "trade-scan"], "engine-only", date(2026, 10, 16))
+    s = Settings(owner_timezone="America/Chicago")  # display only: entries use the scheduler's zone
+    entries = auto.plan_entries(s, ["health", "trade-scan"], "engine-only", date(2026, 10, 16), tz="Asia/Manila")
     assert [e.job for e in entries] == ["health"]
     assert entries[0].command[-3:] == ("automation", "run", "health")
     assert entries[0].triggers == (Trigger(15, 30),)
@@ -140,20 +142,26 @@ def _settings():
     return Settings(agent="codex", automation_mode="engine-only")
 
 
-def test_run_job_logs_and_stops_on_failure(tmp_path):
+def test_run_job_logs_and_keeps_going_after_a_failure(tmp_path):
+    """A failed snapshot (e.g. a lapsed Flaim sign-in) must still send the digest: it is built from the last snapshot
+    and its Health section tells the owner to sign in again. The job still reports the first failure."""
     calls = []
 
     def runner(cmd, cwd):
-        calls.append(cmd)
+        calls.append(cmd[3:])
         return (1, "boom") if "snapshot" in cmd else (0, "ok\n")
 
     now = datetime(2026, 10, 16, 8, 0, tzinfo=UTC)
     code, log = auto.run_job("daily-gm", _settings(), runner=runner, log_dir=tmp_path, now=now)
-    assert code == 1 and len(calls) == 1
+    assert code == 1 and calls == [["snapshot"], ["digest", "--send"]]
     assert log.name == "daily-gm-20261016T080000Z.log"
     text = log.read_text(encoding="utf-8")
-    assert "boom" in text and "exit=1" in text and "result=1" in text
+    assert "boom" in text and "exit=1" in text and "exit=0" in text and "result=1" in text
     assert not (tmp_path / "daily-gm.lock").exists()
+
+    rcs = iter([0, 7])  # the first failing command's code wins, wherever it is
+    code, _ = auto.run_job("lineup-guard", _settings(), runner=lambda c, w: (next(rcs), ""), log_dir=tmp_path)
+    assert code == 7
 
     code, _ = auto.run_job("health", _settings(), runner=lambda c, w: (0, "fine"), log_dir=tmp_path, now=now)
     assert code == 0
@@ -182,3 +190,155 @@ def test_run_job_scheduler_invokes_agent(tmp_path):
     s = Settings(agent="copilot", automation_mode="scheduler", routine_model="cheap")
     auto.run_job("lineup-guard", s, runner=lambda c, w: (seen.append(c), (0, ""))[1], log_dir=tmp_path)
     assert seen[0][0] == "copilot" and "cheap" in seen[0]
+
+
+def test_engine_only_health_job_messages_its_failures():
+    assert [c[3:] for c in auto.plan_run("health", _settings())] == [["health", "--notify-on-fail"]]
+
+
+# ---------------------------------------------------------------- the scheduler's clock, not the owner's zone
+
+NOV = date(2026, 11, 16)  # EST: ET = UTC-5
+
+
+def test_entries_use_the_scheduler_zone_not_the_owner_zone():
+    """On a UTC box with an owner in Los Angeles, cron fires in UTC: 10:00 ET must be written as 15:00, not 07:00."""
+    s = Settings(owner_timezone="America/Los_Angeles")
+    guard, gm = auto.plan_entries(s, ["lineup-guard", "daily-gm"], "engine-only", NOV, tz="Etc/UTC")
+    assert guard.triggers[0] == Trigger(15, 0) and guard.triggers[-1] == Trigger(4, 45)
+    assert gm.triggers == (Trigger(9, 0),)  # 04:00 ET
+    assert auto.owner_triggers("daily-gm", "America/Los_Angeles", NOV) == (Trigger(1, 0),)  # display only
+
+
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="time.tzset is Unix-only")
+def test_no_zone_means_this_computers_local_time(monkeypatch):
+    monkeypatch.setenv("TZ", "Asia/Manila")
+    time.tzset()
+    try:
+        assert auto.convert_trigger(Trigger(3, 0), None, date(2026, 10, 16)) == Trigger(15, 0)
+        assert auto.et_offset_minutes(None, date(2026, 10, 16)) == 12 * 60
+    finally:
+        monkeypatch.undo()
+        time.tzset()
+
+
+def test_scheduler_timezone_ignores_a_shells_tz(monkeypatch):
+    from fbm import setup_wizard
+
+    seen = []
+    monkeypatch.setattr(setup_wizard, "detect_timezone", lambda use_env=True: seen.append(use_env) or "Etc/UTC")
+    monkeypatch.delenv("TZ", raising=False)
+    assert auto.scheduler_timezone() is None and seen == []  # this process's local time is the system zone
+    monkeypatch.setenv("TZ", "America/Los_Angeles")  # cron, launchd and Task Scheduler don't see a shell's TZ
+    assert auto.scheduler_timezone() == "Etc/UTC" and seen == [False]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="reads /etc/localtime")
+def test_detect_timezone_can_skip_tz(monkeypatch):
+    from fbm import setup_wizard
+
+    monkeypatch.setenv("TZ", "Asia/Manila")
+    monkeypatch.setattr(setup_wizard.os.path, "realpath", lambda p: "/usr/share/zoneinfo/Europe/Paris")
+    assert setup_wizard.detect_timezone() == "Asia/Manila"
+    assert setup_wizard.detect_timezone(use_env=False) == "Europe/Paris"
+
+
+def test_et_offsets():
+    assert auto.et_offset_minutes("Etc/UTC", NOV) == 300
+    assert auto.et_offset_minutes("Etc/UTC", date(2026, 7, 1)) == 240
+    assert auto.et_offset_minutes("America/Los_Angeles", NOV) == -180
+    assert auto.next_offset_change("Etc/UTC", date(2026, 10, 16)) == date(2026, 11, 1)
+
+
+def _cli(monkeypatch, tmp_path, settings, tz="Etc/UTC"):
+    from fbm import cli_automation
+
+    monkeypatch.setattr(cli_automation, "load_settings", lambda: settings)
+    monkeypatch.setattr(auto, "scheduler_timezone", lambda: tz)
+    monkeypatch.setattr(auto, "detect_backend", lambda: "cron")
+    monkeypatch.setattr(auto, "INSTALL_RECORD", tmp_path / "installed.json")
+
+
+def _invoke(*args):
+    from typer.testing import CliRunner
+
+    from fbm.cli import app
+
+    return CliRunner().invoke(app, ["automation", *args])
+
+
+def test_install_dry_run_uses_the_computers_clock_and_names_the_mismatch(monkeypatch, tmp_path):
+    _cli(monkeypatch, tmp_path, Settings(owner_timezone="America/Los_Angeles", automation_mode="engine-only"))
+    r = _invoke("install", "--mode", "engine-only", "--jobs", "daily-gm", "--dry-run")
+    assert r.exit_code == 0, r.output
+    hour = auto.convert_trigger(Trigger(4, 0), "Etc/UTC").hour  # 09 in winter, 08 in summer
+    assert f"0 {hour} * * * cd " in r.output and "0 1 * * * cd " not in r.output  # not Los Angeles wall time
+    assert "this computer's clock (Etc/UTC)" in r.output and "America/Los_Angeles" in r.output
+    assert not (tmp_path / "installed.json").exists()
+
+
+def test_install_records_what_it_installed_and_fails_loudly(monkeypatch, tmp_path):
+    _cli(monkeypatch, tmp_path, Settings(automation_mode="engine-only"))
+    monkeypatch.setattr(auto, "install_entries", lambda entries, backend: ["crontab: FAILED no permission"])
+    r = _invoke("install", "--mode", "engine-only", "--jobs", "health")
+    assert r.exit_code == 1 and "FAILED" in r.output  # `fbm setup` must not report a failed install as OK
+    assert not (tmp_path / "installed.json").exists()
+
+    monkeypatch.setattr(auto, "install_entries", lambda entries, backend: ["crontab: updated"])
+    r = _invoke("install", "--mode", "engine-only", "--jobs", "health,data-sync")
+    assert r.exit_code == 0, r.output
+    record = auto.read_install_record()
+    assert set(record) == {"health", "data-sync"} and record["health"]["zone"] == "Etc/UTC"
+    assert record["health"]["offset_min"] == auto.et_offset_minutes("Etc/UTC", datetime.now(auto.ET).date())
+
+
+def test_install_record_round_trip(tmp_path):
+    path = tmp_path / "installed.json"
+    entries = auto.plan_entries(Settings(), ["health", "data-sync"], "engine-only", NOV, tz="Etc/UTC")
+    auto.save_install_record(entries, "Etc/UTC", NOV, path)
+    expected = {"zone": "Etc/UTC", "offset_min": 300, "installed_on": "2026-11-16"}
+    assert auto.read_install_record(path)["data-sync"] == expected
+    auto.forget_install_record(["health"], path)
+    assert list(auto.read_install_record(path)) == ["data-sync"]
+    auto.forget_install_record(list(auto.JOBS), path)
+    assert not path.exists() and auto.read_install_record(path) == {}
+    path.write_text("not json", encoding="utf-8")
+    assert auto.read_install_record(path) == {}
+
+
+# ---------------------------------------------------------------- no cron installed (minimal Linux)
+
+
+def test_missing_crontab_is_a_clear_message_not_a_traceback(monkeypatch, tmp_path):
+    assert "sudo apt install -y cron" in auto.missing_scheduler("cron", which=lambda exe: None)
+    assert auto.missing_scheduler("cron", which=lambda exe: "/usr/bin/" + exe) == ""
+    _cli(monkeypatch, tmp_path, Settings(automation_mode="engine-only"))
+
+    def no_crontab(cmd, **kwargs):
+        raise FileNotFoundError(2, "No such file or directory", cmd[0])
+
+    monkeypatch.setattr(auto.subprocess, "run", no_crontab)
+    with pytest.raises(auto.SchedulerUnavailable, match="install cron"):
+        auto.list_installed("cron")
+
+    r = _invoke("install", "--mode", "engine-only", "--jobs", "health")
+    assert r.exit_code == 1 and "crontab not found: install cron" in r.output
+    assert isinstance(r.exception, SystemExit)  # a message, no traceback
+    assert not (tmp_path / "installed.json").exists()
+    r = _invoke("list")  # openclaw/install.sh looks for "No FBM scheduler entries"
+    assert r.exit_code == 0 and "No FBM scheduler entries installed (crontab not found" in r.output
+    r = _invoke("remove")
+    assert r.exit_code == 0 and "No FBM scheduler entries to remove (crontab not found" in r.output
+
+    monkeypatch.setattr(auto, "missing_scheduler", lambda backend: "crontab not found: install cron")
+    r = _invoke("install", "--mode", "engine-only", "--jobs", "health", "--dry-run")
+    assert r.exit_code == 0 and "crontab not found: install cron" in r.output  # the setup preview warns up front
+
+
+def test_remove_all_says_setup_would_reinstall(monkeypatch, tmp_path):
+    _cli(monkeypatch, tmp_path, Settings(automation_mode="engine-only"))
+    (tmp_path / "installed.json").write_text('{"health": {"offset_min": 300}}', encoding="utf-8")
+    monkeypatch.setattr(auto, "remove_installed", lambda backend, jobs: ["crontab: updated"])
+    r = _invoke("remove")
+    assert r.exit_code == 0 and "fbm setup --automation none --skip-data --yes" in r.output
+    assert not (tmp_path / "installed.json").exists()

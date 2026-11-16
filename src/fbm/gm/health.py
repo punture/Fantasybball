@@ -393,6 +393,64 @@ def check_ht_planner(rows: list[dict[str, Any]]) -> dict[str, str]:
     return result(name, OK, f"AFTER - BEFORE shrank {drop_share:.0%} vs banked growth {banked_share:.0%}")
 
 
+def _hours(minutes: int) -> str:
+    return f"{abs(minutes) / 60:g}h"
+
+
+def check_schedule(
+    mode: str, installed: Mapping[str, Mapping[str, Any]], machine_offset: int, owner_offset: int
+) -> list[dict[str, str]]:
+    """OS-scheduled jobs (modes engine-only / scheduler) hold wall times on this computer's clock, computed for one
+    US/Eastern offset. installed: job -> {zone, offset_min, installed_on} (fbm.automation.read_install_record);
+    machine_offset / owner_offset: minutes this computer's / the owner's zone is ahead of ET today. Jobs installed
+    before the record existed used the owner's zone."""
+    if mode not in ("engine-only", "scheduler"):
+        return []
+    name = "Scheduled jobs"
+    fix = "Run `fbm automation install` (it converts the US/Eastern job times to this computer's clock)."
+    if not installed:
+        if machine_offset != owner_offset:
+            return [
+                result(
+                    name,
+                    FAIL,
+                    f"no install record: jobs installed by an older FBM use your time zone, but this computer's clock "
+                    f"is {_hours(machine_offset - owner_offset)} off it, so they run that far from their US/Eastern "
+                    "times (lineup alerts miss tip-off)",
+                    fix,
+                )
+            ]
+        return [
+            result(name, WARN, f"[automation] mode = {mode} but no install record (older FBM, or not installed)", fix)
+        ]
+    stale = {job: r for job, r in installed.items() if r.get("offset_min") != machine_offset}
+    if stale:
+        drift = max((abs(machine_offset - int(r.get("offset_min") or 0)) for r in stale.values()), default=0)
+        return [
+            result(
+                name,
+                WARN,
+                f"{', '.join(sorted(stale))}: set for another US/Eastern offset (a daylight-saving change or a new "
+                f"computer time zone since install), so they run {_hours(drift)} off",
+                fix,
+            )
+        ]
+    zones = ", ".join(sorted({str(r.get("zone", "?")) for r in installed.values()}))
+    return [result(name, OK, f"{len(installed)} job(s) on this computer's clock ({zones}), in step with US/Eastern")]
+
+
+FAIL_ALERT_KEY = "health_fail_alert"  # notify_state key: the ET day and FAIL checks last messaged
+
+
+def fail_alert(checks: Sequence[Mapping[str, str]]) -> tuple[str, str, list[str]]:
+    """Subject, Markdown body and sorted check names for a message about the FAIL rows (no names: nothing to send).
+    Details and fixes are presence-only (never secrets), as everywhere in this module."""
+    failing = [c for c in checks if c["status"] == FAIL]
+    lines = [f"- {c['check']}: {c['detail']}" + (f" Fix: {c['fix']}" if c.get("fix") else "") for c in failing]
+    body = "\n".join([*lines, "", "Run `fbm health` on the FBM computer for every check."])
+    return f"FBM health: {len(failing)} check(s) FAIL", body, sorted(c["check"] for c in failing)
+
+
 def check_hashtag(ht: dict[str, Any] | None) -> list[dict[str, str]]:
     """Hashtag Basketball gate: OK when disabled (not needed) or healthy; FAIL with reasons/fix when enabled and not
     healthy (owner rule: no suggestions without healthy HT data)."""
@@ -456,6 +514,19 @@ def _notify_readiness(settings: Any) -> dict[str, tuple[bool, str]]:
         return readiness(settings)
     except Exception as err:  # noqa: BLE001 - health must load; report the channels as unchecked
         return {ch: (False, f"not checked ({type(err).__name__})") for ch in settings.notify_channels}
+
+
+def _schedule_checks(mode: str, owner_tz: str, today: date) -> list[dict[str, str]]:
+    if mode not in ("engine-only", "scheduler"):
+        return []
+    from fbm import automation
+
+    try:
+        machine = automation.et_offset_minutes(automation.scheduler_timezone(), today)
+        owner = automation.et_offset_minutes(owner_tz, today)
+        return check_schedule(mode, automation.read_install_record(), machine, owner)
+    except Exception as err:  # noqa: BLE001 - health must load (e.g. an invalid [owner] timezone)
+        return [result("Scheduled jobs", WARN, f"not checked ({type(err).__name__})", "Check [owner] timezone.")]
 
 
 def _web_session_age_days(now: datetime) -> float | None:
@@ -623,6 +694,7 @@ def gather(
     checks += check_notifications(
         settings.email_enabled, outbox, now, settings.notify_channels, _notify_readiness(settings)
     )
+    checks += _schedule_checks(settings.automation_mode, settings.owner_timezone, today_et)
     checks += check_hashtag(ht_status)
     if ht_status and ht_status.get("enabled"):
         checks.append(check_ht_planner(planner_rows))

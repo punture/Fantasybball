@@ -9,6 +9,7 @@ included). Everything is computed by FBM's engine, so no AI agent or paid servic
 | Weekly preview: new opponent, per-category odds, games both sides, the week's streaming plan, adds left | weekly-retro, Monday 05:00 ET | `fbm digest --kind weekly --send` |
 | Lineup alert: a starter ruled out or a game-time decision, a bench player who should start, a changed recommendation | lineup-guard, every 15 min 10:00-23:45 ET, about 90 min before the first affected tip-off | `fbm alert lineup --send` |
 | Injury update: status changes on your roster and your opponent's, "next man up" free agents | lineup-guard, every 15 min | `fbm alert injuries --send` |
+| Health problem: the checks that FAIL (e.g. a lapsed Flaim sign-in) and how to fix each | health, 03:30 ET, only on a FAIL, at most once a day per problem | `fbm health --notify-on-fail` |
 
 FBM never changes your league: alerts carry the exact steps for you to make in Yahoo. Times are shown in your time
 zone (`[owner] timezone`); Yahoo game days are US/Eastern dates.
@@ -44,6 +45,7 @@ uv run fbm notify setup
 It asks for the channels (in order), the bot token (hidden input; Enter keeps a stored one) and your chat id, then:
 
 - stores the token in your OS credential store (Windows Credential Manager, macOS Keychain, Linux Secret Service),
+  or, on a machine without one, in FBM's private file `data/secrets/credentials.json`,
 - writes `[notify] channels` and `telegram_chat_id` into `config/settings.toml` (never the token).
 
 Non-interactive options: `--channels telegram,email`, `--chat-id 123456789`, `--openclaw-bin /path/to/openclaw`.
@@ -63,8 +65,9 @@ uv run fbm automation install --mode engine-only --jobs data-sync,lineup-guard,d
 uv run fbm automation jobs      # the schedule in ET and in your time zone
 ```
 
-This uses the OS scheduler (Task Scheduler, launchd or cron) and keeps working with no AI agent. With an AI agent
-(`--mode scheduler`) lineup-guard stays hourly; the 15-minute alert schedule is for engine-only mode.
+This uses the OS scheduler (Task Scheduler, launchd or cron) and keeps working with no AI agent. The scheduler runs
+on the computer's own clock: the install converts the US/Eastern times to it, whatever your `[owner] timezone`. With
+an AI agent (`--mode scheduler`) lineup-guard stays hourly; the 15-minute alert schedule is for engine-only mode.
 
 ## Channels
 
@@ -104,7 +107,10 @@ messages arrive silently (no notification sound).
   `where openclaw`). With `telegram` also enabled, messages still arrive through the fallback meanwhile.
 - **Nothing arrives at night**: quiet hours hold the digests; see `fbm notify outbox` (status `held`, later
   `released`).
-- **"Credential store unavailable"**: FBM couldn't read your OS credential store (common on headless Linux). Make
-  one available to the user the scheduler runs as, then run `fbm notify setup` again.
+- **"Credential store unavailable"**, or scheduled jobs say the bot token is missing while your terminal works: the
+  scheduler can't reach your desktop keyring (common on Linux with cron). Use FBM's file store instead: run
+  `export FBM_CREDENTIALS_BACKEND=file`, then `fbm notify setup` again (and `fbm flaim login` if you use Flaim).
+  Once `data/secrets/credentials.json` exists every FBM process uses it, terminal and scheduler alike. See the
+  Troubleshooting table in [free-setup.md](free-setup.md).
 - **An alert keeps saying NO_REPLY**: that's normal unless something is actionable and new. A lineup alert only
   fires within about 90 minutes of the first affected tip-off, once per recommendation per ET game day.
