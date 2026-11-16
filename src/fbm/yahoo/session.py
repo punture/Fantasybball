@@ -2,9 +2,10 @@
 
 Yahoo's website reads the same Fantasy Sports v2 resources (same paths, same XML) from `pub-api-ro.fantasysports.
 yahoo.com`, authenticated by the signed-in browser's cookies. `fbm yahoo login` signs in once in a browser window and
-keeps only the cookies the browser would send to that read-only host, in the OS credential store (never on disk, never
-printed). `YahooClient` then uses them for GETs. This route is undocumented by Yahoo and can change without notice; the
-official API (`fbm auth`) stays the supported path and is used again after `fbm yahoo logout`.
+keeps only the cookies the browser would send to that read-only host, in FBM's secret store (the OS keyring, or
+data/secrets/ on a machine without one; never in the repo, never printed). `YahooClient` then uses them for GETs.
+This route is undocumented by Yahoo and can change without notice; the official API (`fbm auth`) stays the supported
+path and is used again after `fbm yahoo logout`.
 """
 
 from __future__ import annotations

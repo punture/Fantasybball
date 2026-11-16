@@ -1,7 +1,7 @@
 """Local backups of personal state. Memory, reports, and settings are local-only (gitignored), never pushed.
 
 `fbm backup` zips memory/, reports/, config/settings.toml, config/league.toml and data/fbm.db into a local folder.
-Secrets are never included: they live in the OS credential store, not in any of these paths.
+Secrets are never included: they live in the OS credential store (or data/secrets/, never backed up).
 """
 
 from __future__ import annotations

@@ -30,7 +30,7 @@ Dates are **US/Eastern** NBA game days (`YYYY-MM-DD`).
 |---|---|
 | `fbm automation jobs` | Job catalog: ET schedule, skill, model role, engine-only commands |
 | `fbm automation run JOB [--mode scheduler\|engine-only]` | Run one job now (what every scheduler calls). Logs to `reports/automation/` |
-| `fbm automation install [--mode MODE] [--jobs a,b] [--dry-run]` | Install scheduled jobs for the mode (`none`, `agent-app`, `scheduler`, `engine-only`) |
+| `fbm automation install [--mode MODE] [--jobs a,b] [--dry-run]` | Install scheduled jobs for the mode (`none`, `agent-app`, `scheduler`, `engine-only`); jobs default to `[automation] jobs`, and engine-only with none set installs every job that has engine commands |
 | `fbm automation list` | List installed FBM scheduler entries |
 | `fbm automation remove [--jobs a,b]` | Remove FBM scheduler entries (never touches other entries) |
 

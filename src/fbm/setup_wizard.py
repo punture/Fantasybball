@@ -335,7 +335,17 @@ def merged_settings(existing_text: str | None, opts: SetupOptions) -> dict[str, 
         values.setdefault(sec, {})[key] = value
     if channels is not None:
         values.setdefault("notify", {})["channels"] = channels
+    automation = values.get("automation", {})
+    if automation.get("mode") == "engine-only" and not automation.get("jobs"):
+        automation["jobs"] = engine_only_jobs()  # engine-only with no jobs would install nothing
     return values
+
+
+def engine_only_jobs() -> list[str]:
+    """Default engine-only jobs: every catalog job with deterministic `fbm` commands (AI-only jobs are skipped)."""
+    from fbm.automation import CATALOG
+
+    return [name for name, job in CATALOG.items() if job.engine_commands]
 
 
 def write_settings(

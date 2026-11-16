@@ -106,7 +106,10 @@ def category_support(summary: dict[str, Any] | None) -> CategorySupport:
         return CategorySupport(NINE_CAT, assumed_nine_cat=True, settings_read=False)
     cats: list[Category] = []
     ignored: list[dict[str, Any]] = []
-    for c in summary.get("scoring_categories") or []:
+    raw = summary.get("scoring_categories") if isinstance(summary, dict) else None
+    for c in raw if isinstance(raw, list) else []:
+        if not isinstance(c, dict):
+            continue
         stat_id = str(c.get("stat_id", ""))
         if stat_id in _BY_YAHOO_ID:
             cats.append(_BY_YAHOO_ID[stat_id])

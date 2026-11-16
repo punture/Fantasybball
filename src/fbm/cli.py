@@ -160,7 +160,7 @@ def auth(
         store_token_response(payload)
 
     _run(_exchange)
-    console.print("[green]Yahoo authorized.[/] Refresh token stored in your OS credential store.\n")
+    console.print(f"[green]Yahoo authorized.[/] Refresh token stored in {credentials.describe()}.\n")
     _run(_select_league, league_key)
 
 

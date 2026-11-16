@@ -90,19 +90,20 @@ def _interactive(opts: wiz.SetupOptions, current: dict) -> None:
                 opts.jobs = jobs
                 break
             console.print("[red]Unknown job name.[/]")
+    route = str(current.get("yahoo", {}).get("route") or "auto")
+    on_yahoo = current.get("league", {}).get("source", "demo") == "yahoo"
     if opts.yahoo_route is None:
         console.print(
             "\nFBM reads your Yahoo league read-only (it never changes it). Until you connect, it runs a demo league "
             "over real NBA players."
         )
-        route = str(current.get("yahoo", {}).get("route") or "auto")
-        opts.yahoo_route = _choice(
-            "How should FBM read your Yahoo league?", _ROUTE_HELP, route if route != "auto" else "flaim"
-        )
+        # Recommend Flaim to new installs; a connected league keeps its route on Enter (switching needs a sign-in).
+        default = route if route != "auto" or on_yahoo else "flaim"
+        opts.yahoo_route = _choice("How should FBM read your Yahoo league?", _ROUTE_HELP, default)
     if opts.league_source is None:
         opts.league_source = current.get("league", {}).get("source", "demo")
-        if opts.league_source != "yahoo":
-            _ask_connect(opts)
+        if opts.league_source != "yahoo" or opts.yahoo_route != route:
+            _ask_connect(opts)  # still on the demo, or the connected league moves to a new route
     notify = current.get("notify", {})
     if opts.telegram is None:
         channels = notify.get("channels")
@@ -337,16 +338,18 @@ def setup_cmd(
         console.print(f"[{_COLORS[r.status]}]{r.status:>7}[/] {r.step}: {r.detail}")
 
     report = wiz.run_setup(opts, on_step=show)
-    if interactive and report.settings.get("league", {}).get("source") != "yahoo":
-        if opts.flaim_login:
-            _flaim_interactive()
-            report = wiz.check()
-        elif opts.yahoo_approved:
-            _yahoo_interactive()
-            report = wiz.check()
-        elif opts.yahoo_web_session:
-            _fbm("yahoo", "login")
-            report = wiz.check()
+    # flaim_login / yahoo_web_session are set only by _ask_connect (on the demo, or a connected league moving to a new
+    # route); yahoo_approved can also come from --yahoo-approved, so a connected league only runs it to move to api.
+    on_yahoo = report.settings.get("league", {}).get("source") == "yahoo"
+    if interactive and opts.flaim_login:
+        _flaim_interactive()
+        report = wiz.check()
+    elif interactive and opts.yahoo_approved and (not on_yahoo or opts.yahoo_route == "api"):
+        _yahoo_interactive()
+        report = wiz.check()
+    elif interactive and opts.yahoo_web_session:
+        _fbm("yahoo", "login")
+        report = wiz.check()
     if interactive and report.settings.get("league", {}).get("source") == "yahoo" and opts.hashtag is not False:
         _hashtag_interactive(opts, wiz.current_values())
         report = wiz.check()

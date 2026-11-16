@@ -52,8 +52,8 @@ def hashtag_login(
 
     console.print(
         "FBM reads Hashtag Basketball Premium pages with your own sign-in, for your personal use only. Read-only: "
-        "FBM never saves anything on Hashtag. The session is kept in your OS credential store, never in a file or "
-        "the AI chat.\n"
+        "FBM never saves anything on Hashtag. The session is kept in FBM's secret store (the OS credential store, "
+        "or a private gitignored file on a machine without one), never in the repo or the AI chat.\n"
     )
     try:
         new = _paste_session() if paste else hs.browser_login(timeout, browser, echo=console.print)

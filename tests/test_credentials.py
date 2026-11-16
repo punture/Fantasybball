@@ -108,7 +108,7 @@ def test_file_store_round_trip(use_keyring, capsys):
     with pytest.raises(credentials.MissingCredentialError):
         credentials.require(credentials.GMAIL_ADDRESS)
     err = capsys.readouterr().err
-    assert err.count("no OS keyring is available") == 1  # one-time warning, on the first write
+    assert err.count("no usable OS keyring") == 1  # one-time warning, when the file is created
     assert "tok-123" not in err and "FBM_CREDENTIALS_BACKEND=keyring" in err
     assert not list(credentials.secrets_path().parent.glob("*.lock"))
     assert not list(credentials.secrets_path().parent.glob("*.tmp"))
@@ -190,23 +190,86 @@ def test_keyring_round_trip(use_keyring):
     assert not credentials.secrets_path().exists()
 
 
-def test_keyring_reads_secrets_saved_to_the_file_store(use_keyring, monkeypatch):
+def test_an_existing_secrets_file_stays_the_store(use_keyring, monkeypatch):
     use_keyring(fail.Keyring())
     credentials.put("old", "from-file")
-    credentials.put("moved", "stale")
     backend = use_keyring(MemoryKeyring())  # a keyring backend was installed later
+    assert credentials.backend() == credentials.FILE
+    assert "only read for secrets saved there earlier" in credentials.describe()
     assert credentials.get("old") == "from-file"
-    credentials.put("moved", "fresh")  # saving again moves it into the keyring and off the disk
-    assert backend.store[("fbm", "moved")] == "fresh" and "moved" not in _file()["secrets"]
-    credentials.delete("old")
-    assert credentials.get("old") is None
-    monkeypatch.setenv(credentials.BACKEND_ENV, "keyring")
-    credentials.reset_backend()
+    credentials.put("old", "fresh")
+    credentials.put("new", "n")
+    assert backend.store == {} and _file()["secrets"] == {"new": "n", "old": "fresh"}
+    monkeypatch.setenv(credentials.BACKEND_ENV, "keyring")  # moving to the keyring is explicit
     credentials.put("other", "x")
+    assert backend.store == {("fbm", "other"): "x"} and "other" not in _file()["secrets"]
+    assert credentials.get("old") is None  # forced keyring never reads the file
+
+
+def test_file_store_still_reads_and_deletes_older_keyring_secrets(use_keyring):
+    backend = use_keyring(MemoryKeyring())
+    credentials.put("kept", "in-keyring")
+    credentials.put("both", "stale")
+    backend.store[("fbm", "big")] = "chunks:1"
+    backend.store[("fbm", "big.0")] = "abc"
+    use_keyring(LockedKeyring())  # a keyring call fails: this process switches to the file store
+    credentials.put("both", "fresh")
+    use_keyring(backend)  # next process: the keyring works again, but the file exists now
+    assert credentials.backend() == credentials.FILE
+    assert credentials.get("kept") == "in-keyring" and credentials.get_large("big") == "abc"
+    assert credentials.get("both") == "fresh"  # the file copy wins over the older keyring copy
+    credentials.delete("both")
+    assert credentials.get("both") is None and ("fbm", "both") not in backend.store  # no stale copy resurfaces
+    credentials.delete_large("big")
+    assert credentials.get_large("big") is None and not any(k[1].startswith("big") for k in backend.store)
+
+
+def test_linux_desktop_terminal_and_cron_share_the_file_store(use_keyring, monkeypatch):
+    """The terminal sees the desktop keyring, cron jobs don't: after one sign-in with the file store, both agree."""
+    desktop = MemoryKeyring()
+
+    def process(kind, env=None):
+        use_keyring(desktop if kind == "terminal" else fail.Keyring())
+        monkeypatch.delenv(credentials.BACKEND_ENV, raising=False)
+        if env:
+            monkeypatch.setenv(credentials.BACKEND_ENV, env)
+        credentials.reset_backend()
+
+    process("terminal")
+    credentials.put("token", "v1")  # first sign-in: the desktop keyring
+    process("cron")
+    assert credentials.get("token") is None  # cron can't reach it
+    process("terminal", "file")
+    credentials.put("token", "v2")  # documented fix: sign in once with FBM_CREDENTIALS_BACKEND=file
+    process("terminal")
+    assert credentials.get("token") == "v2"  # not the stale keyring copy
+    credentials.put("token", "v3")  # a terminal command refreshes the token
+    credentials.put("bot", "b")  # a new secret saved later from a terminal
+    process("cron")
+    assert credentials.get("token") == "v3" and credentials.get("bot") == "b"
+    credentials.put("token", "v4")  # cron refreshes it
+    process("terminal")
+    assert credentials.get("token") == "v4"
+
+
+def test_warning_is_shown_once_per_install(use_keyring, capsys):
     use_keyring(fail.Keyring())
-    monkeypatch.delenv(credentials.BACKEND_ENV)
-    credentials.reset_backend()
-    assert credentials.get("other") is None  # forced keyring never wrote the file
+    credentials.put("a", "1")
+    credentials.reset_backend()  # a later process, e.g. a scheduled job refreshing a token
+    credentials.put("a", "2")
+    assert capsys.readouterr().err.count("no usable OS keyring") == 1
+
+
+def test_unwritable_secrets_file_is_a_clear_error(use_keyring, monkeypatch):
+    use_keyring(fail.Keyring())
+
+    def boom(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(credentials.os, "replace", boom)
+    with pytest.raises(credentials.CredentialStoreError, match="Can't write"):
+        credentials.put("k", "secret-value")
+    assert not list(credentials.secrets_path().parent.glob("*.tmp"))
 
 
 def test_failing_keyring_falls_back_to_file(use_keyring):
@@ -230,9 +293,28 @@ def test_forced_keyring_raises_a_clear_error(use_keyring, monkeypatch):
 
 def test_broken_file_does_not_break_a_working_keyring(use_keyring):
     use_keyring(MemoryKeyring())
+    assert credentials.backend() == credentials.KEYRING  # chosen before the file appeared
     path = credentials.secrets_path()
     path.parent.mkdir(parents=True)
     path.write_text("garbage", encoding="utf-8")
     assert credentials.get("k") is None
     credentials.put("k", "v")
     assert credentials.get("k") == "v"
+    credentials.reset_backend()  # a later process: the (corrupt) file is the store now, and says so
+    with pytest.raises(credentials.CredentialStoreError, match="not valid JSON"):
+        credentials.get("k")
+
+
+def test_broken_keyring_does_not_break_the_file_store(use_keyring, monkeypatch):
+    use_keyring(fail.Keyring())
+    credentials.put("k", "v")
+    backend = use_keyring(MemoryKeyring())
+
+    def boom(*args):
+        raise RuntimeError("D-Bus went away")
+
+    monkeypatch.setattr(keyring, "get_password", boom)
+    monkeypatch.setattr(keyring, "delete_password", boom)
+    assert credentials.get("k") == "v" and credentials.get("missing") is None
+    credentials.delete("k")
+    assert credentials.get("k") is None and backend.store == {}

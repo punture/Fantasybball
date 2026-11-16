@@ -284,9 +284,9 @@ def yahoo_login(
 
     console.print(
         "FBM will read your league the way Yahoo's own website does, with your Yahoo sign-in. Read-only: FBM "
-        "never changes your league. The session is kept in your OS credential store, never in a file or the "
-        "AI chat. This route isn't documented by Yahoo and may stop working; the official API (`fbm auth`) "
-        "stays available once approved.\n"
+        "never changes your league. The session is kept in FBM's secret store (the OS credential store, or a "
+        "private gitignored file on a machine without one), never in the repo or the AI chat. This route isn't "
+        "documented by Yahoo and may stop working; the official API (`fbm auth`) stays available once approved.\n"
     )
     try:
         new = _paste_session() if paste else ws.browser_login(timeout, browser, echo=console.print)
@@ -299,7 +299,7 @@ def yahoo_login(
         _fail(f"Yahoo didn't accept the session for reads ({err.status}: {err.description}). Nothing saved. {tip}")
     ws.save(new)
     console.print(
-        f"[green]Signed in.[/] Yahoo web session saved to your OS credential store ({len(new.cookies)} cookies)."
+        f"[green]Signed in.[/] Yahoo web session saved to {credentials.describe()} ({len(new.cookies)} cookies)."
     )
     if not leagues:
         _fail("No Yahoo NBA leagues found for this account this season.")
@@ -319,7 +319,7 @@ def yahoo_logout() -> None:
     from fbm.yahoo import session as ws
 
     ws.clear()
-    console.print("Yahoo web session removed from your OS credential store.")
+    console.print("Yahoo web session removed from FBM's secret store.")
 
 
 @yahoo_app.command("status")

@@ -2,11 +2,16 @@
 file on machines without one (e.g. headless Linux).
 
 Backend choice (`FBM_CREDENTIALS_BACKEND`): `keyring` forces the OS keyring, `file` forces the file store, unset (or
-`auto`) uses the keyring when it has a usable backend and the file store otherwise, also switching to the file store
-for the rest of the process if a keyring call fails. The file store is data/secrets/credentials.json (gitignored;
-`FBM_CREDENTIALS_FILE` overrides the path; folder 0700, file 0600 on POSIX; atomic writes under a lock file). In auto
-mode a name missing from the keyring is also looked up in the file store, so secrets saved while no keyring was
-available keep working once one is installed (saving again moves them into the keyring).
+`auto`) uses the file store once the secrets file exists or when the keyring has no usable backend, and the keyring
+otherwise (switching to the file store if a keyring call fails). The file store is data/secrets/credentials.json
+(gitignored; `FBM_CREDENTIALS_FILE` overrides the path; folder 0700, file 0600 on POSIX; atomic writes under a lock
+file).
+
+Once the secrets file exists it stays this install's store in auto mode, so every process agrees on one store: a
+Linux desktop's terminal (which sees the desktop keyring) and its cron jobs (which can't) read and refresh the same
+tokens. A name missing from the file is still read from a usable keyring (secrets saved there before the file
+existed), and deleting a name removes both copies. To move to the keyring, set `FBM_CREDENTIALS_BACKEND=keyring`, sign
+in again and delete the file.
 
 Secrets never touch the repo, logs, or reports, and nothing here prints a secret value.
 """
@@ -52,10 +57,10 @@ _LOCK_WAIT_S = 10.0
 _LOCK_STALE_S = 30.0
 
 FILE_STORE_WARNING = (
-    "FBM: no OS keyring is available here, so secrets are kept in {path} (only your user account can read it; "
+    "FBM: no usable OS keyring here, so secrets are kept in {path} from now on (only your user account can read it; "
     "it is gitignored and never backed up by `fbm backup`). To use an OS keyring instead, install and unlock one "
-    "(Linux: gnome-keyring or KWallet with a Secret Service session) and set {env}=keyring. Set {env}=file to keep "
-    "the file store and silence this note."
+    "(Linux: gnome-keyring or KWallet with a Secret Service session), set {env}=keyring, sign in again and delete "
+    "that file. This note is shown once, when the file is created."
 )
 
 
@@ -71,6 +76,7 @@ class CredentialStoreError(RuntimeError):
 
 _auto_choice: str | None = None  # this process's auto-detected backend
 _warned = False
+_keyring_down = False  # a keyring call failed in this process: don't touch the keyring again
 
 
 def _forced() -> str | None:
@@ -94,7 +100,7 @@ def backend() -> str:
     if forced:
         return forced
     if _auto_choice is None:
-        _auto_choice = KEYRING if keyring_usable() else FILE
+        _auto_choice = FILE if secrets_path().exists() or not keyring_usable() else KEYRING
     return _auto_choice
 
 
@@ -111,33 +117,63 @@ def describe() -> str:
         except Exception:  # noqa: BLE001
             name = "unknown"
         return f"OS keyring ({name})"
-    why = f"{BACKEND_ENV}=file" if _forced() == FILE else "no OS keyring available"
+    if _forced() == FILE:
+        why = f"{BACKEND_ENV}=file"
+    elif _keyring_readable():
+        why = "secrets file in use; the OS keyring is only read for secrets saved there earlier"
+    else:
+        why = "no OS keyring available"
     return f"file {_display(secrets_path())} ({why})"
 
 
 def reset_backend() -> None:
     """Forget the auto-detected backend and the one-time warning (tests; after installing a keyring backend)."""
-    global _auto_choice, _warned
-    _auto_choice, _warned = None, False
+    global _auto_choice, _warned, _keyring_down
+    _auto_choice, _warned, _keyring_down = None, False, False
 
 
 def _keyring_failed(err: KeyringError) -> None:
     """A keyring call failed: in auto mode use the file store for the rest of the process; forced keyring raises."""
-    global _auto_choice
+    global _auto_choice, _keyring_down
     if _forced() == KEYRING:
         raise CredentialStoreError(
             f"{BACKEND_ENV}=keyring but the OS keyring failed ({type(err).__name__}). Unlock or install a keyring "
             f"backend, or unset {BACKEND_ENV} to use FBM's file store."
         ) from err
-    _auto_choice = FILE
+    _auto_choice, _keyring_down = FILE, True
 
 
-def _warn_file_store() -> None:
+def _keyring_readable() -> bool:
+    """Auto mode with the file store in use: may older secrets still be read from (or deleted in) the keyring?"""
+    return _forced() is None and not _keyring_down and keyring_usable()
+
+
+def _keyring_extra_get(name: str) -> str | None:
+    """Best effort: a broken or locked keyring must never break the file store."""
+    if not _keyring_readable():
+        return None
+    try:
+        return keyring.get_password(SERVICE, name)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _keyring_extra_delete(name: str) -> None:
+    if not _keyring_readable():
+        return
+    try:
+        keyring.delete_password(SERVICE, name)
+    except Exception:  # noqa: BLE001 - PasswordDeleteError (nothing stored) or a keyring that can't be reached
+        pass
+
+
+def _warn_file_store(path: Path) -> None:
+    """Once, when auto mode creates the secrets file (not on every token refresh of a scheduled job)."""
     global _warned
-    if _warned or _forced() == FILE:
+    if _warned or _forced() == FILE or path.exists():
         return
     _warned = True
-    print(FILE_STORE_WARNING.format(path=_display(secrets_path()), env=BACKEND_ENV), file=sys.stderr)
+    print(FILE_STORE_WARNING.format(path=_display(path), env=BACKEND_ENV), file=sys.stderr)
 
 
 def _display(path: Path) -> str:
@@ -185,12 +221,24 @@ def _write_file(path: Path, secrets: dict[str, str]) -> None:
             fh.write(payload + "\n")
             fh.flush()
             os.fsync(fh.fileno())
-        os.replace(tmp, path)
+        _replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
     if os.name == "posix":
         os.chmod(path, 0o600)
+
+
+def _replace(src: str, dst: Path) -> None:
+    """os.replace, retried briefly: on Windows it fails while another process has the file open for reading."""
+    for attempt in range(40):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == 39:
+                raise
+            time.sleep(0.05)
 
 
 @contextmanager
@@ -227,11 +275,14 @@ def _file_get(name: str) -> str | None:
 
 def _file_put(name: str, value: str) -> None:
     path = secrets_path()
-    _warn_file_store()
+    _warn_file_store(path)
     with _locked(path):
         secrets = _read_file(path)
         secrets[name] = value
-        _write_file(path, secrets)
+        try:
+            _write_file(path, secrets)
+        except OSError as err:
+            raise CredentialStoreError(f"Can't write {_display(path)} ({type(err).__name__}).") from err
 
 
 def _file_delete(name: str) -> None:
@@ -241,7 +292,10 @@ def _file_delete(name: str) -> None:
     with _locked(path):
         secrets = _read_file(path)
         if secrets.pop(name, None) is not None:
-            _write_file(path, secrets)
+            try:
+                _write_file(path, secrets)
+            except OSError as err:
+                raise CredentialStoreError(f"Can't write {_display(path)} ({type(err).__name__}).") from err
 
 
 # ------------------------------------------------------------------ public API
@@ -264,8 +318,9 @@ def get(name: str) -> str | None:
         else:
             if value is not None or _forced() == KEYRING:
                 return value
-            return _also_file(_file_get, name)  # saved while no keyring was available
-    return _file_get(name)
+            return _also_file(_file_get, name)  # another process created the secrets file meanwhile
+    value = _file_get(name)
+    return value if value is not None else _keyring_extra_get(name)  # saved to the keyring before the file existed
 
 
 def put(name: str, value: str) -> None:
@@ -275,8 +330,6 @@ def put(name: str, value: str) -> None:
         except KeyringError as err:
             _keyring_failed(err)
         else:
-            if _forced() != KEYRING:
-                _also_file(_file_delete, name)  # an older file-store copy must not linger on disk
             return
     _file_put(name, value)
 
@@ -294,6 +347,7 @@ def delete(name: str) -> None:
                 _also_file(_file_delete, name)
             return
     _file_delete(name)
+    _keyring_extra_delete(name)  # an older keyring copy must not resurface through get()
 
 
 def require(name: str) -> str:

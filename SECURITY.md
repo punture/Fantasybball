@@ -4,7 +4,8 @@
 FBM stores Yahoo OAuth credentials (client id/secret, refresh token) in your OS credential store via
 [`keyring`](https://pypi.org/project/keyring/) (Windows Credential Manager, macOS Keychain, Secret Service on Linux).
 They are never written to tracked files. On a machine without an OS keyring (e.g. headless Linux) FBM keeps them in
-`data/secrets/credentials.json` instead: gitignored, folder 0700 and file 0600 on POSIX, excluded from `fbm backup`
+`data/secrets/credentials.json` instead: gitignored, folder 0700 and file 0600 on POSIX, excluded from `fbm backup`.
+Once that file exists FBM keeps using it, so scheduled jobs and terminals share one store
 (`FBM_CREDENTIALS_BACKEND=keyring|file` forces one store).
 
 ## Never commit

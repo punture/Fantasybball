@@ -91,8 +91,12 @@ anything.
 > **Secrets on a machine without a keyring.** FBM keeps tokens in your OS credential store (Windows Credential
 > Manager, macOS Keychain, Linux Secret Service). Headless Linux usually has none, so FBM stores them in
 > `data/secrets/credentials.json` instead, readable only by your user account and never committed or backed up,
-> and prints a one-time note saying so. `uv run fbm status` shows which store is in use. See
-> [Troubleshooting](#troubleshooting) for Linux desktops.
+> and prints a one-time note when it creates that file. Once the file exists, FBM keeps using it.
+> `uv run fbm status` shows which store is in use.
+>
+> **Linux desktop with the engine-only schedule:** cron jobs can't reach your desktop keyring, so do the sign-ins in
+> steps 4 and 7 with the file store: run `export FBM_CREDENTIALS_BACKEND=file` in that terminal first. From then on
+> both your terminal and the scheduled jobs use the file.
 
 ## 4. Connect Yahoo through Flaim
 
@@ -206,8 +210,8 @@ uv run fbm automation list
 - **With a coding agent:** open your AI agent (Claude Code, Codex, Copilot, Cursor, Gemini CLI, ...) in the
   `Fantasybball` folder and say **"Open the GM office"**. Setup generated its instructions (`uv run fbm agent
   install` regenerates them).
-- **Without AI:** the CLI works on its own: `uv run fbm lineup`, `uv run fbm waiver`, `uv run fbm proposals list`,
-  and the alerts above.
+- **Without AI:** the CLI works on its own: `uv run fbm lineup`, `uv run fbm waiver "<player>"`,
+  `uv run fbm proposals list`, and the alerts above.
 
 ## 10. Your daily routine
 
@@ -247,8 +251,8 @@ Your settings, memory, data and secrets are gitignored, so updates never overwri
 | Symptom | Fix |
 |---|---|
 | `uv` or `git` "not found" right after installing | Open a new terminal (the installer updates PATH for new sessions). |
-| "FBM: no OS keyring is available here, so secrets are kept in data/secrets/credentials.json" | Normal on headless Linux. Set `FBM_CREDENTIALS_BACKEND=file` to keep the file store without the note, or install and unlock a keyring (GNOME Keyring or KWallet) and set `FBM_CREDENTIALS_BACKEND=keyring`. |
-| Linux desktop: things work in your terminal but scheduled jobs say a sign-in or token is missing | cron jobs can't reach the desktop keyring. Re-run the sign-ins with the file store: `export FBM_CREDENTIALS_BACKEND=file`, then `uv run fbm flaim login` and `uv run fbm notify setup`. Everything then reads the file. |
+| "FBM: no usable OS keyring here, so secrets are kept in data/secrets/credentials.json from now on" | Normal on headless Linux, shown once. To use a keyring instead, install and unlock one (GNOME Keyring or KWallet), set `FBM_CREDENTIALS_BACKEND=keyring`, sign in again and delete that file. |
+| Linux desktop: things work in your terminal but scheduled jobs say a sign-in or token is missing | cron jobs can't reach the desktop keyring. Re-run the sign-ins once with the file store: `export FBM_CREDENTIALS_BACKEND=file`, then `uv run fbm flaim login` and `uv run fbm notify setup`. Once the file exists every FBM process uses it, terminal and cron alike. |
 | "...credentials.json.lock is held by another FBM process" | Another FBM command is saving a token. If none is running, delete that `.lock` file. |
 | `fbm flaim check` fails or the snapshot is stale | Check your league still shows at <https://flaim.app/leagues>, then `uv run fbm flaim login` again. `uv run fbm flaim status` shows the connection without secrets. |
 | No Telegram messages | Send your bot a message first, re-run `uv run fbm notify setup` (token typo?), then `uv run fbm notify test --channel telegram`. |

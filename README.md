@@ -248,8 +248,8 @@ uv run fbm setup --check
 
 Your personal state is gitignored, so pulls don't conflict with it. Upgrading a Yahoo-league install from before
 Hashtag support? Run `uv run fbm migrate overhaul` once (it backs up first, enables `[hashtag]`, and moves your past
-proposals into the decision log); without a Hashtag subscription, then run `uv run fbm setup --no-hashtag --yes` to
-stay on the free engine. Want a change in the core engine or prompts? Open a pull request (see
+proposals into the decision log). If you don't have a Hashtag subscription, then run
+`uv run fbm setup --no-hashtag --yes` to stay on the free engine. Want a change in the core engine or prompts? Open a pull request (see
 [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 ## Documentation

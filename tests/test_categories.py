@@ -78,6 +78,13 @@ def test_nothing_mapped_falls_back_to_nine_cat_and_says_so():
     assert cats.from_league_settings({}) == cats.NINE_CAT
 
 
+def test_malformed_summary_never_crashes():
+    """health and context_pack read a saved file: a summary in another shape must degrade to 'assumed 9-cat'."""
+    for summary in ({"scoring_categories": {"5": "FG%"}}, {"scoring_categories": ["PTS", None]}, ["x"]):
+        support = cats.category_support(summary)  # type: ignore[arg-type]
+        assert support.categories == cats.NINE_CAT and support.status == "WARN"
+
+
 def test_integer_stat_ids_still_map():
     support = cats.category_support({"scoring_categories": [{"stat_id": 12, "display_name": "PTS"}]})
     assert [c.key for c in support.categories] == ["pts"]

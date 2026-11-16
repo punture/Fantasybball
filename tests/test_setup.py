@@ -344,6 +344,63 @@ def test_setup_flags_reach_options(monkeypatch):
     assert bad.exit_code == 2 and "--yahoo-route must be one of" in bad.output
 
 
+def test_engine_only_without_jobs_installs_the_engine_jobs(tmp_path, monkeypatch):
+    """`--automation engine-only` with no jobs (docs/free-setup.md one-liner) must not install nothing."""
+    from typer.testing import CliRunner
+
+    from fbm import cli_automation
+    from fbm.cli import app
+    from fbm.settings import Settings
+
+    engine = wiz.engine_only_jobs()
+    assert "data-sync" in engine and "health" in engine and "trade-scan" not in engine  # trade-scan is AI-only
+    report, runner = _run(tmp_path, wiz.SetupOptions(automation="engine-only", skip_data=True))
+    assert ["automation", "install", "--mode", "engine-only", "--jobs", ",".join(engine)] in runner.calls
+    s = tomllib.loads((tmp_path / "config" / "settings.toml").read_text(encoding="utf-8"))
+    assert s["automation"]["jobs"] == engine
+    kept = wiz.merged_settings(None, wiz.SetupOptions(automation="engine-only", jobs=["health"]))
+    assert kept["automation"]["jobs"] == ["health"]
+
+    monkeypatch.setattr(cli_automation, "load_settings", lambda: Settings(automation_mode="engine-only"))
+    result = CliRunner().invoke(app, ["automation", "install", "--mode", "engine-only", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert "nothing to install" not in result.output and "data-sync" in result.output
+
+
+def test_interactive_route_default_keeps_a_connected_league(monkeypatch):
+    """Enter on the route question recommends Flaim to new installs but never moves a connected league off its route
+    (that would need a new sign-in); picking another route on a connected league asks to connect it."""
+    from fbm import cli_setup
+
+    defaults, asked = {}, []
+
+    def fake_choice(question, options, default):
+        defaults[question] = default
+        return answers.get(question, default)
+
+    monkeypatch.setattr(cli_setup, "_choice", fake_choice)
+    monkeypatch.setattr(cli_setup.typer, "prompt", lambda *a, **k: k.get("default"))
+    monkeypatch.setattr(cli_setup.typer, "confirm", lambda *a, **k: False)
+    monkeypatch.setattr(cli_setup, "_ask_connect", lambda opts: asked.append(opts.yahoo_route))
+    route_q = "How should FBM read your Yahoo league?"
+    base = {"owner": {"timezone": "Asia/Tokyo"}, "automation": {"mode": "none"}}
+
+    answers: dict[str, str] = {}
+    fresh = wiz.SetupOptions()
+    cli_setup._interactive(fresh, {**base, "league": {"source": "demo"}, "yahoo": {"route": "auto"}})
+    assert defaults[route_q] == "flaim" and fresh.yahoo_route == "flaim" and asked == ["flaim"]
+
+    asked.clear()
+    connected = wiz.SetupOptions()
+    cli_setup._interactive(connected, {**base, "league": {"source": "yahoo"}, "yahoo": {"route": "auto"}})
+    assert defaults[route_q] == "auto" and connected.yahoo_route == "auto" and asked == []
+
+    answers[route_q] = "flaim"
+    moving = wiz.SetupOptions()
+    cli_setup._interactive(moving, {**base, "league": {"source": "yahoo"}, "yahoo": {"route": "auto"}})
+    assert moving.yahoo_route == "flaim" and asked == ["flaim"]
+
+
 def test_interactive_connect_questions_follow_the_route(monkeypatch):
     from fbm import cli_setup
 
