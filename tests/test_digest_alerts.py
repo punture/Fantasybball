@@ -190,9 +190,120 @@ def test_yahoo_lineup_alert_rereads_a_stale_snapshot_before_a_tip(world, monkeyp
     text, state = alerts.lineup_alert(world.conn, now, CHI)
     assert reads == [alerts.SNAPSHOT_MAX_AGE_MIN] and state is not None
     assert "**A** is O and in your lineup" in text and "- B: BN → PG" in text
+    assert "Yahoo data is from" not in text  # re-read: fresh data, no warning
     reads.clear()
     assert alerts.lineup_alert(world.conn, TIP_BOS - timedelta(hours=4), CHI) == (None, None)
     assert reads == []  # no tip-off near: no Yahoo read
+
+
+REFRESH_ERROR = "FlaimLoginRequired: the Flaim sign-in expired or was revoked: run `fbm flaim login`"
+STALE_WHY = (
+    "(refresh failed: FlaimLoginRequired: the Flaim sign-in expired or was revoked: run 'fbm flaim login'): check "
+    "Yahoo before acting; fix: `fbm flaim login`, then `fbm flaim check`."
+)
+
+
+def _yahoo_unreadable(monkeypatch, league, fetched_at):
+    """A Yahoo league whose refresh fails: load_or_refresh falls back to the saved snapshot and records why."""
+    from fbm.flaim import route
+    from fbm.league import yahoo_league
+
+    league.source, league.fetched_at = "yahoo", fetched_at.isoformat()
+    reads = []
+    monkeypatch.setattr(svc, "active_league", lambda: league)
+    monkeypatch.setattr(svc, "_roll_week", lambda lg: lg)
+    monkeypatch.setattr(yahoo_league, "load_or_refresh", lambda age: reads.append(age) or league)
+    monkeypatch.setattr(yahoo_league, "last_refresh_error", lambda: REFRESH_ERROR)
+    monkeypatch.setattr(route, "is_flaim", lambda settings=None: True)
+    return reads
+
+
+def test_lineup_alert_from_an_old_snapshot_says_so_under_the_title(world, monkeypatch):
+    """Yahoo couldn't be re-read before the tip: the advice from the saved snapshot still goes out, but it says how
+    old the roster and statuses are, why, and the fix."""
+    now = TIP_BOS - timedelta(minutes=45)
+    reads = _yahoo_unreadable(monkeypatch, world.league, now - timedelta(hours=3))
+    text, state = alerts.lineup_alert(world.conn, now, CHI)
+    assert reads == [alerts.SNAPSHOT_MAX_AGE_MIN] and state["key"] != alerts.STALE_KEY
+    lines = text.splitlines()
+    assert lines[0] == "**Lineup alert · Mon Nov 16**"
+    assert lines[1] == f"**Yahoo data is from Mon Nov 16, 2:15 PM CST** {STALE_WHY}"
+    assert lines[2].startswith("First tip-off 6:00 PM CST") and "- B: BN → PG" in text
+
+
+def test_lineup_alert_after_a_real_failed_refresh(world, monkeypatch, tmp_path):
+    """Through the real load_or_refresh: the Flaim sign-in lapsed, the saved snapshot (2.4 days old) is served, and
+    the alert says so instead of advising from it."""
+    from fbm.flaim import route
+    from fbm.flaim.errors import FlaimLoginRequired
+    from fbm.league import yahoo_league
+
+    def lapsed(day=None):
+        raise FlaimLoginRequired("the Flaim sign-in expired or was revoked")
+
+    now = TIP_BOS - timedelta(minutes=45)
+    world.league.source, world.league.fetched_at = "yahoo", (now - timedelta(days=2, hours=10)).isoformat()
+    monkeypatch.setattr(yahoo_league, "SNAPSHOT_PATH", tmp_path / "yahoo_league.json")
+    yahoo_league.save_league(world.league, yahoo_league.SNAPSHOT_PATH)
+    monkeypatch.setattr(yahoo_league, "_last_failure", {"at": None, "error": ""})
+    monkeypatch.setattr(yahoo_league, "refresh", lapsed)
+    monkeypatch.setattr(route, "is_flaim", lambda settings=None: True)
+    monkeypatch.setattr(svc, "active_league", lambda: yahoo_league.load_or_refresh(60))
+    monkeypatch.setattr(svc, "_roll_week", lambda lg: lg)
+    text, state = alerts.lineup_alert(world.conn, now, CHI)
+    assert state["key"] == alerts.STALE_KEY and "→" not in text
+    assert text.splitlines()[1] == (
+        "**Yahoo data is from Sat Nov 14, 7:15 AM CST** (refresh failed: FlaimLoginRequired: Flaim: the Flaim sign-in "
+        "expired or was revoked: run 'fbm flaim login'): check Yahoo before acting; fix: `fbm flaim login`, then "
+        "`fbm flaim check`."
+    )
+
+
+def test_lineup_alert_gives_no_advice_from_a_snapshot_days_old(world, monkeypatch):
+    """Days-old rosters (sign-in lapsed): the owner may have changed the team since, so only the warning goes out,
+    once per game day; the advice resumes once Yahoo is readable again."""
+    now = TIP_BOS - timedelta(minutes=45)
+    _yahoo_unreadable(monkeypatch, world.league, now - timedelta(days=2, hours=10))
+    plan = svc._lineup_plan
+    monkeypatch.setattr(svc, "_lineup_plan", lambda *a: pytest.fail("no advice from a roster days old"))
+    text, state = alerts.lineup_alert(world.conn, now, CHI)
+    assert state == {"et_date": "2026-11-16", "key": alerts.STALE_KEY}
+    assert text.splitlines() == [
+        "**Lineup alert · Mon Nov 16**",
+        f"**Yahoo data is from Sat Nov 14, 7:15 AM CST** {STALE_WHY}",
+        "First tip-off 6:00 PM CST (in 45 min): FBM can't see your current lineup, so it has no advice. Check your "
+        "lineup in Yahoo before tip-off.",
+    ]
+    notify_state.put(world.conn, alerts.LINEUP_KEY, state)
+    assert alerts.lineup_alert(world.conn, now + timedelta(minutes=15), CHI) == (None, None)
+
+    monkeypatch.setattr(svc, "_lineup_plan", plan)
+    world.league.fetched_at = (now + timedelta(minutes=30)).isoformat()  # signed in again: a fresh read
+    text, state = alerts.lineup_alert(world.conn, now + timedelta(minutes=30), CHI)
+    assert state["key"] != alerts.STALE_KEY and "Yahoo data is from" not in text and "- B: BN → PG" in text
+
+
+def test_stale_snapshot_only_for_an_old_yahoo_snapshot(monkeypatch):
+    from fbm.flaim import route
+    from fbm.league import yahoo_league
+
+    monkeypatch.setattr(yahoo_league, "last_refresh_error", lambda: "")
+    monkeypatch.setattr(route, "is_flaim", lambda settings=None: False)
+    now = datetime(2026, 11, 16, 22, 0, tzinfo=UTC)
+    league = _league([P("a", "BOS", "PG")])
+    league.fetched_at = (now - timedelta(days=3)).isoformat()
+    assert alerts.stale_snapshot(league, now, 10) is None  # the demo league has no Yahoo snapshot
+    league.source, league.fetched_at = "yahoo", (now - timedelta(minutes=10)).isoformat()
+    assert alerts.stale_snapshot(league, now, 10) is None
+    league.fetched_at = (now - timedelta(minutes=11)).replace(tzinfo=None).isoformat()  # naive = UTC
+    stale = alerts.stale_snapshot(league, now, 10)
+    assert stale == {"fetched_at": league.fetched_at, "age_min": 11, "refresh_error": "", "fix": "`fbm yahoo check`"}
+    assert alerts.render_stale(stale, CHI) == (
+        "**Yahoo data is from Mon Nov 16, 3:49 PM CST** (not refreshed): check Yahoo before acting; fix: "
+        "`fbm yahoo check`."
+    )
+    league.fetched_at = ""
+    assert alerts.stale_snapshot(league, now, 10)["age_min"] is None
 
 
 def _event(conn, pid, old, new, comment=""):
@@ -261,6 +372,23 @@ def test_injury_alert_baseline_then_new_changes_and_pickups(world, monkeypatch):
     assert "Old Pick" not in text and "Faller" not in text
     notify_state.put(conn, alerts.INJURY_KEY, state)
     assert alerts.injury_alert(conn, now, CHI)[0] is None
+
+
+def test_injury_alert_from_an_old_snapshot_says_so(world, monkeypatch):
+    """ESPN's news is current, but whose player it is and his slot come from the Yahoo snapshot: say how old."""
+    now = datetime(2026, 11, 16, 22, 0, tzinfo=UTC)
+    _yahoo_unreadable(monkeypatch, world.league, now - timedelta(hours=5))
+    monkeypatch.setattr(svc, "_default_opponent", lambda league: league.team("t2"))
+    monkeypatch.setattr(svc, "signals_tool", lambda **k: {"signals": []})
+    monkeypatch.setattr(svc, "post_sync", lambda: None)
+    notify_state.put(world.conn, alerts.INJURY_KEY, {"last_event_id": 0, "signals": []})
+    assert alerts.injury_alert(world.conn, now, CHI)[0] is None  # an old snapshot alone is no injury news
+    _event(world.conn, "c", "Healthy", "Out")
+    text, _state = alerts.injury_alert(world.conn, now, CHI)
+    lines = text.splitlines()
+    assert lines[0] == "**Injury update · 4:00 PM CST**"
+    assert lines[1] == f"**Yahoo data is from Mon Nov 16, 11:00 AM CST** {STALE_WHY}"
+    assert "- **C** (LAL) Healthy → **Out**" in text
 
 
 def test_refresh_injuries_only_when_stale(conn, monkeypatch):

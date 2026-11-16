@@ -1,6 +1,7 @@
 """The deterministic daily / weekly digest behind `fbm digest` (no AI): a compact Telegram-ready brief, verdict
 first, every number taken from FBM's engine (fbm.gm.services). Each section is collected on its own, so one
-failing tool shows a short "unavailable" note instead of killing the digest.
+failing tool shows a short "unavailable" note instead of killing the digest. The verdict opens with old (a failed Yahoo
+refresh) or unreadable league data, and never says "no moves needed" when the lineup or streaming check failed.
 
 daily: today's actions (lineup, matchup odds, injuries, best stream, top waiver target, pickups, your queue, health).
 weekly (Monday): the new matchup preview (opponent, per-category odds, games both sides, the week's streaming plan,
@@ -71,6 +72,19 @@ def _first_tip(svc: Any, now: datetime) -> datetime | None:
     return min(tips) if tips else None
 
 
+def _snapshot(svc: Any, now: datetime) -> dict[str, Any] | Unavailable | None:
+    """The league's data freshness: alerts.stale_snapshot when a Yahoo snapshot couldn't be re-read, Unavailable
+    (the whole message, which carries the fix) when the league can't be read at all, else None."""
+    from fbm.constants import C
+    from fbm.notify.alerts import stale_snapshot
+
+    try:
+        league = svc.active_league()
+    except Exception as err:  # noqa: BLE001 - reported in the verdict
+        return Unavailable(clip(err, 200))
+    return stale_snapshot(league, now, float(C("yahoo.snapshot_max_age_min")))
+
+
 def _injuries(svc: Any) -> dict[str, Any]:
     league = svc.active_league()
     try:
@@ -106,6 +120,7 @@ def collect(kind: str = "daily", record: bool = False, now: datetime | None = No
     weekly = kind == "weekly"
     trigger = ("weekly-plan" if weekly else "daily-gm") if record else "owner-ask"
     d: dict[str, Any] = {"kind": kind, "now": now, "today_et": nba_today(now)}
+    d["snapshot"] = attempt(lambda: _snapshot(svc, now))
     d["overview"] = attempt(svc.league_overview)
     d["odds"] = attempt(lambda: svc.simulate_matchup_tool(n=ODDS_SIMS))
     if not weekly:
@@ -143,7 +158,17 @@ def _guarded(title: str, render: Callable[[], list[str]]) -> list[str]:
         return _unavailable(title, Unavailable(f"{type(err).__name__} while rendering"))
 
 
-def _verdict(d: Mapping[str, Any]) -> str:
+def _data_note(d: Mapping[str, Any], tz: tzinfo) -> str:
+    """The verdict's first words when the league data is old (a failed Yahoo refresh) or couldn't be read at all."""
+    from fbm.notify.alerts import render_stale
+
+    snap = d.get("snapshot")
+    if isinstance(snap, Unavailable):
+        return f"FBM couldn't read your league ({snap.reason})."
+    return render_stale(snap, tz) if snap else ""
+
+
+def _verdict(d: Mapping[str, Any], tz: tzinfo) -> str:
     odds, weekly = d.get("odds"), d["kind"] == "weekly"
     if _ok(odds):
         p = float(odds["p_win_majority"])
@@ -177,11 +202,19 @@ def _verdict(d: Mapping[str, Any]) -> str:
     offers = d.get("offers")
     if _ok(offers) and offers.get("incoming_trades"):
         todo.append(f"{len(offers['incoming_trades'])} trade offer(s)")
+    # "No moves needed" rests on the lineup and streaming sections: when one couldn't be computed, FBM doesn't know.
+    unchecked = [
+        name for name, key in (("lineup", "lineup"), ("streaming", "stream")) if isinstance(d.get(key), Unavailable)
+    ]
     when = "this week" if weekly else "today"
-    act = f"{when.capitalize()}: {', '.join(todo)}." if todo else f"No moves needed {when}."
+    act = f"{when.capitalize()}: {', '.join(todo)}." if todo else ""
+    if unchecked:
+        act += f" {' and '.join(unchecked).capitalize()} unavailable: see below."
+    elif not todo:
+        act = f"No moves needed {when}."
     if later:
         act += f" Next: {', '.join(later)}."
-    return f"**Verdict:** {head} {act}"
+    return "**Verdict:** " + " ".join(part for part in (_data_note(d, tz), head, act.strip()) if part)
 
 
 def _effective_day(move: Mapping[str, Any]) -> date | None:
@@ -191,7 +224,7 @@ def _effective_day(move: Mapping[str, Any]) -> date | None:
         return None
 
 
-def _header(d: Mapping[str, Any]) -> list[str]:
+def _header(d: Mapping[str, Any], tz: tzinfo) -> list[str]:
     kind = "weekly preview" if d["kind"] == "weekly" else "daily"
     lines = [f"**FBM {kind} · {day_label(d['today_et'])}**"]
     ov = d.get("overview")
@@ -214,7 +247,7 @@ def _header(d: Mapping[str, Any]) -> list[str]:
         if ov.get("source") == "demo":
             bits.append("demo league")
         lines.append(" · ".join(bits))
-    lines.append(_verdict(d))
+    lines.append(_verdict(d, tz))
     return lines
 
 
@@ -405,7 +438,7 @@ def render(d: Mapping[str, Any], settings: Settings | None = None, limit: int = 
         )
     sections = [_guarded(title, render) for title, render in parts]
     try:
-        head = _header(d)
+        head = _header(d, tz)
     except Exception as err:  # noqa: BLE001 - still deliver the sections
         kind = "weekly preview" if weekly else "daily"
         head = [f"**FBM {kind} · {day_label(d['today_et'])}**", f"**Verdict:** unavailable ({type(err).__name__})."]
