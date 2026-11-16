@@ -810,7 +810,7 @@ def constants_cmd() -> None:
 @app.command()
 def sim(
     start: str = typer.Option(None, help="First ET day to simulate (default: today or first game day)."),
-    opponent: str = typer.Option(None, help="Opponent team key (default: next team in the demo rotation)."),
+    opponent: str = typer.Option(None, help="Opponent team key (default: this week's opponent)."),
     n: int = typer.Option(10000, help="Simulations."),
     demo: bool = typer.Option(False, "--demo", hidden=True),
 ) -> None:
@@ -828,8 +828,9 @@ def sim(
     if opponent:
         opp = league.team(opponent)
     else:
-        idx = [t.team_key for t in league.teams].index(me.team_key)
-        opp = league.teams[(idx + 1) % len(league.teams)]
+        from fbm.gm.services import _default_opponent
+
+        opp = _default_opponent(league)  # this week's real opponent (Yahoo), else the next team in the rotation
     value = ctx.value_map()
     models = ctx.models([*me.player_ids(), *opp.player_ids()])
     back = ctx.return_dates()
