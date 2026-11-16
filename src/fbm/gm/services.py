@@ -749,7 +749,11 @@ def _lineup_plan(
     ros = _value(c, punts).to_dict()
     params = _policy.all_values(conn)
     opp = _default_opponent(league)
-    start = None if target == nba_today() else target
+    # This week's odds (banked stats + the rest of the week, HT's in HT mode) for today and, in a Daily - Tomorrow
+    # league, for the first changeable day of this week (today's lineup stands as set); a later day is simulated
+    # from that day.
+    current = target == nba_today() or (target == changeable and target <= _week_window()[2])
+    start = None if current else target
     try:
         odds, odds_source = _week_odds(league, opp, int(C("lineup.swing_sims")), start)
     except Exception:  # noqa: BLE001 - no odds: every category weighs the same (ROS-style lineup)
@@ -806,13 +810,13 @@ def _lineup_plan(
     else:
         add("weighted", "week-weighted lineup (contested categories count more)", weighted(active_g), active_g)
     add("ros", "rest-of-season value lineup", ros, active_g)
-    max_impact = float(params["policy.pct_risk.max_impact"])
+    max_impact = float(params["policy.pct_risk.max_impact"])  # <= 0: G impact below which a shooter sits
     risky = {
         pid
         for pid in playing
         if pid in active_g.index
         and any(
-            weights.get(k, 0.0) >= 0.5 and float(active_g.at[pid, f"g_{k}"]) < -max_impact
+            weights.get(k, 0.0) >= 0.5 and float(active_g.at[pid, f"g_{k}"]) < max_impact
             for k in ("fg_pct", "ft_pct")
             if f"g_{k}" in active_g.columns
         )
@@ -1125,11 +1129,13 @@ def optimize_lineup(day: str | None = None, trigger: str | None = None) -> dict[
 def _lineup_rules(plan: dict[str, Any], league: LeagueState) -> dict[str, Any]:
     """Lineup fields shared by optimize_lineup and lineup_steps: the league's deadline and the week-ahead IL
     returns that need a roster spot."""
+    blocked = {m.player_id for m in plan["moves"] if m.blocked}  # already reported as IL moves needing a drop
+    waiting = {pid: d for pid, d in plan["waiting_returns"].items() if pid not in blocked}
     out: dict[str, Any] = {
         "lineup_deadline": plan["deadline"],
         "first_changeable_et": plan["first_change_day"].isoformat(),
         "objective": plan["objective"],
-        "il_returns_needing_a_spot": _waiting_lines(league, plan["waiting_returns"]),
+        "il_returns_needing_a_spot": _waiting_lines(league, waiting),
     }
     if plan["lineup_locked"]:
         out["lineup_locked_note"] = (
@@ -1586,6 +1592,9 @@ def _opponent_streaming(
         banked=banked.get(opp.team_key, {}),
         skip=skip,
         return_dates=c.return_dates(conn),
+        # the same league rules as my own streams: Daily - Tomorrow adds start tomorrow, tipped games don't count
+        first_change_day=max(_first_change_day(), days[0]),
+        tipped={days[0]: _tipped_now(days[0])} if days[0] == nba_today() else {},
     )
     plan = plan_streams(sctx, fa, droppable, adds)
     n_cats = len(league.categories)
@@ -2560,6 +2569,7 @@ def streaming_plan(
         objective=OBJECTIVE_P_WIN if headone else OBJECTIVE_CATS,
         first_change_day=first,
         tipped=tipped,
+        punts=frozenset(pun),
     )
     if not odds_now:
         odds_now = _ht.odds_map(evaluate(sctx, [])[0])
@@ -3440,7 +3450,9 @@ def _week_anchor() -> tuple[int, date, date] | None:
         league = active_league()
     except GMError:
         return None
-    if league.week_start and league.week_end:
+    # A week rolled past Yahoo's finished one may come from the Monday-Sunday calendar fallback (fbm.league.weeks),
+    # which ignores merged weeks: only Yahoo's own reported week anchors the numbering.
+    if league.week_start and league.week_end and not league.rolled_from_week:
         return league.week, league.week_start, league.week_end
     return None
 

@@ -235,13 +235,15 @@ games and value above replacement.
   to tomorrow, and streaming moves start tomorrow. Only a tomorrow-style Yahoo code switches this on; set the constant
   to `tomorrow` if your league is Daily – Tomorrow and FBM shows `lineup_deadline: today`.
 - **Games already tipped** (ESPN schedule state and start time, as of now): an added player gets no credit for them.
-- **IL returners**: from his ESPN return date (or once healthy) an IL player moves to the active roster when a spot
-  is open (or an Out active player can take his IL slot); otherwise `il_returns_needing_a_spot` says a drop is needed.
+- **IL returners**: from his ESPN return date (or once healthy or a game-time decision; Out, out-for-season and
+  doubtful players stay) an IL player moves to the active roster when a spot is open (or an active player not expected
+  to play can take his IL slot); otherwise `il_returns_needing_a_spot` says a drop is needed.
   Trade evaluations count IL players at their rest-of-season availability.
 - **Lineups**: a game counts at the player's play probability (a healthy player with a game wins a tight slot over a
   game-time decision); the pct-risk option benches poor shooters outright. IL stashes only players not expected to
   play today (Out, doubtful, or a game-time decision with no game) and activates IL players whose status improved
-  when they have a game.
+  when they have a game and a spot is open (no spot: they stay on IL, listed in `il_returns_needing_a_spot`;
+  `il_moves_blocked` stays reserved for players no longer IL-eligible, which Yahoo blocks roster moves over).
 - **Objective**: H2H Categories maximizes expected categories won, with the same contested-category weights in the
   search and in the chooser; H2H Most Categories (one win per week) maximizes P(win the matchup) (thresholds in
   categories converted by `stream.p_win_per_cat`), and lineups weight categories by how often each decides the week.

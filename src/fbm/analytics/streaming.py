@@ -14,7 +14,7 @@ reports those still waiting for one.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 
@@ -99,6 +99,7 @@ class StreamContext:
     objective: str = OBJECTIVE_CATS  # OBJECTIVE_CATS | OBJECTIVE_P_WIN
     first_change_day: date | None = None  # first ET day a move or lineup change made now takes effect (None: days[0])
     tipped: Mapping[date, set[str]] = field(default_factory=dict)  # ET day -> NBA teams whose game has tipped (now)
+    punts: Collection[str] | None = None  # punted category keys (None: the categories weighted 0)
     _lineups: dict = field(default_factory=dict)
 
     @property
@@ -119,9 +120,17 @@ def score(odds: MatchupOdds, weights: Mapping[str, float]) -> float:
     return float(sum(weights.get(o.category.key, 1.0) * (o.p_win + 0.5 * o.p_tie) for o in odds.categories))
 
 
-def expected_cats(odds: MatchupOdds, weights: Mapping[str, float]) -> float:
-    """Expected categories won over the non-punted categories (weight > 0), each counting 1."""
-    return float(sum(o.p_win + 0.5 * o.p_tie for o in odds.categories if weights.get(o.category.key, 1.0) > 0))
+def expected_cats(odds: MatchupOdds, punts: Collection[str]) -> float:
+    """Expected categories won over the non-punted categories, each counting 1."""
+    return float(sum(o.p_win + 0.5 * o.p_tie for o in odds.categories if o.category.key not in punts))
+
+
+def _punted(ctx: StreamContext) -> Collection[str]:
+    """Punted categories: `ctx.punts`, else those weighted 0 (contested-category weights may be 0 for decided
+    categories when policy.weight_floor is 0, so services pass the punts explicitly)."""
+    if ctx.punts is not None:
+        return ctx.punts
+    return {k for k, w in ctx.weights.items() if w <= 0}
 
 
 def objective_score(odds: MatchupOdds, ctx: StreamContext) -> float:
@@ -272,6 +281,7 @@ def plan_streams(
     added: dict[str, date] = {}
     drop_pool = list(droppable)
     current_odds = base_odds
+    punted = _punted(ctx)
     for _ in range(max(0, adds_available)):
         best: tuple[float, PlannedMove, MatchupOdds, int] | None = None
         rosters = roster_by_day(ctx, moves)
@@ -304,7 +314,7 @@ def plan_streams(
                             cost,
                             len(ctx.add_game_days(add, d)),
                             len(ctx.game_days(drop, d)) if drop else 0,
-                            expected_cats(odds, ctx.weights) - expected_cats(current_odds, ctx.weights),
+                            expected_cats(odds, punted) - expected_cats(current_odds, punted),
                             p_win_week(odds) - p_win_week(current_odds),
                         )
                         best = (objective, planned, odds, starts)

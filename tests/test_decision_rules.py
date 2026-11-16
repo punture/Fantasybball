@@ -94,6 +94,14 @@ def test_activate_ready_best_value_first():
     assert {p.player_id: p.selected for p in out} == {"x": "IL", "y": "BN", "a": "C"}
     assert players[1].selected == "IL+"
     assert activate_ready([rp("o", selected="IL", status="O", eligible=HURT)], 5)[1:] == ((), ())
+    # Out for the season and doubtful players aren't returners: no activation, and no "needs a spot" heads-up.
+    for status in ("OFS", "DOUBTFUL", "INJ"):
+        held = [rp("x", selected="IL", status=status, eligible=HURT), rp("a", selected="C")]
+        assert activate_ready(held, 5)[1:] == ((), ()) and activate_ready(held, 1)[1:] == ((), ())
+    # A game-time decision stashed on IL+ can come back; an out-for-season active player can take his slot.
+    gtd, ofs = rp("g", selected="IL+", status="GTD", eligible=HURT), rp("f", selected="C", status="OFS", eligible=HURT)
+    out, activated, waiting = activate_ready([gtd, ofs], 1)
+    assert activated == ("g",) and waiting == () and {p.player_id: p.selected for p in out} == {"g": "BN", "f": "IL+"}
 
 
 def test_week_plan_locked_days_and_not_playing():
@@ -226,8 +234,16 @@ def test_il_player_whose_status_improved_is_activated_when_he_has_a_game():
     assert "with a game today" in moves[0].reason
     assert il_moves([back], IL_COUNTS, capacity=2, playing=set()) == []  # no game: no reason to activate
     assert il_moves([back], IL_COUNTS, capacity=2) == []  # games unknown
-    full = il_moves([back, rp("a", selected="C")], IL_COUNTS, capacity=1, playing={"r"})
-    assert [(m.player_id, m.blocked) for m in full] == [("r", True)] and "roster is full" in full[0].reason
+    # Full roster: he is still IL-eligible, so nothing is blocked (no il_moves_blocked alert): he stays on IL.
+    assert il_moves([back, rp("a", selected="C")], IL_COUNTS, capacity=1, playing={"r"}) == []
+    # ... unless an active player ruled out can take his IL+ slot.
+    hurt = rp("h", selected="C", status="O", eligible=HURT)
+    swap = il_moves([back, hurt], {"IL+": 1}, capacity=1, playing={"r", "h"})
+    assert [(m.player_id, m.to_slot, m.blocked) for m in swap] == [("h", "IL+", False), ("r", "BN", False)]
+    # A healthy player no longer IL-eligible with a full roster is the blocked (compliance) case.
+    healthy = rp("x", selected="IL", eligible=("C", "UTIL"))
+    full = il_moves([healthy, rp("a", selected="C")], IL_COUNTS, capacity=1, playing={"x"})
+    assert [(m.player_id, m.blocked) for m in full] == [("x", True)] and "roster is full" in full[0].reason
 
 
 # ---------------------------------------------------------------- D. lineup deadline
@@ -366,6 +382,22 @@ def test_chooser_values_options_by_p_win_in_most_categories_leagues():
     assert choosers.choose(_decision(legacy, objective="p_win", p_win_per_cat=0.25), P) == "old"
 
 
+def test_chooser_keeps_category_units_when_options_carry_no_p_win_delta():
+    # Trades, claims and IL options are scored in categories even in Most Categories leagues: the stream_min_gain
+    # threshold must stay in categories too (not x p_win_per_cat), or a +0.02-category trade would clear it.
+    options = [
+        {"id": "stand", "label": "s", "stand_pat": True, "cat_scores": {"pts": 0.0}},
+        {"id": "trade", "label": "t", "cat_scores": {"pts": 0.02}},
+    ]
+    trade = {"id": 1, "kind": "trade", "situation": {"odds": {"pts": 0.5}, "punts": []}, "options": options}
+    assert choosers.choose(trade, P) == "stand"
+    trade["situation"].update(objective="p_win", p_win_per_cat=0.25)
+    assert choosers.choose(trade, P) == "stand"
+    # A stand-pat option logged without p_win_delta still counts as no change in P(win).
+    mixed = [options[0], {"id": "win", "label": "w", "adds": 1, "cat_scores": {"pts": -5.0}, "p_win_delta": 0.02}]
+    assert choosers.choose(_decision(mixed, objective="p_win", p_win_per_cat=0.25), P) == "win"
+
+
 def test_chooser_uses_logged_category_weights():
     lineup = {
         "id": 1,
@@ -426,3 +458,16 @@ def test_known_week_bounds_anchor_the_numbering():
     assert by_number[1] == (date(2026, 10, 26), date(2026, 11, 1)) and 0 not in by_number
     reversed_bounds = (1, date(2026, 11, 8), date(2026, 11, 1))
     assert build_weeks(date(2026, 10, 20), date(2026, 11, 8), anchor=reversed_bounds)[0].number == 1  # ignored
+
+
+def test_expected_cats_gain_counts_decided_categories_weighted_zero_but_not_punts():
+    # policy.weight_floor may be 0: a decided (not punted) category then weighs 0 in the search but still counts in
+    # gain_expected_cats ("unweighted change over non-punted categories").
+    from fbm.analytics.streaming import _punted, expected_cats
+
+    odds = odds_of(0.5, 0.3)
+    assert expected_cats(odds, ()) == pytest.approx(4.5)
+    assert expected_cats(odds, {"pts"}) == pytest.approx(4.0)
+    zero = {c.key: (0.0 if c.key == "blk" else 1.0) for c in NINE_CAT}
+    assert _punted(stream_world(weights=zero)) == {"blk"}  # no explicit punts: weight 0 means punted
+    assert _punted(stream_world(weights=zero, punts=frozenset())) == frozenset()

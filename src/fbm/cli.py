@@ -661,8 +661,15 @@ def lineup(
             f"[{style}]IL move{' (blocked)' if m.blocked else ''}:[/] {m.name}: {m.from_slot} → "
             f"{m.to_slot} ({m.reason})"
         )
-    if plan["locked"]:
+    if plan.get("lineup_locked"):
+        console.print(
+            f"[dim]🔒 = Daily - Tomorrow league: this day's lineup is locked; changes apply from "
+            f"{plan['first_change_day']}[/]"
+        )
+    elif plan["locked"]:
         console.print("[dim]🔒 = game started; slot locked[/]")
+    for line in svc._waiting_lines(league, plan.get("waiting_returns") or {}):
+        console.print(f"[red]Needs a roster move:[/] {line}")
     changed = sum(1 for p in team.players if p.selected != res.assignments[p.player_id])
     if changed:
         console.print(

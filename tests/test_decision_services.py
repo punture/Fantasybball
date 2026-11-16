@@ -201,3 +201,69 @@ def test_evaluate_add_drop_follows_the_deadline_and_tipped_games(monkeypatch, co
     out = svc.evaluate_add_drop(add="F", drop="D", n=300)
     assert out["effective_et"] == D1.isoformat()
     assert out["games_left_this_week"] == {"add": 2, "drop": 1}  # F's D1 game already tipped
+
+
+def test_daily_tomorrow_lineup_weighs_this_weeks_odds_banked_stats_included(monkeypatch, conn, tmp_path):
+    # Tomorrow is the first changeable day: its swing weights come from this week's odds (banked stats, HT's odds in
+    # HT mode, today's lineup as set), not from a fresh simulation starting tomorrow with nothing banked.
+    world(monkeypatch, conn, tmp_path, HEADONE_TOMORROW)
+    starts = []
+
+    def fake_odds(league, opp, n, start_day=None):
+        starts.append(start_day)
+        return {c.key: 0.5 for c in NINE_CAT}, "fbm_sim"
+
+    monkeypatch.setattr(svc, "_week_odds", fake_odds)
+    svc.optimize_lineup()
+    svc.optimize_lineup(day=D3.isoformat())  # a later day is simulated from that day
+    assert starts == [None, D3]
+
+
+def test_playoff_week_anchor_ignores_weeks_rolled_by_the_calendar(monkeypatch):
+    from dataclasses import replace
+
+    league = LeagueState("L", "T", 2027, "t1", [], week=7, week_start=D1, week_end=D3)
+    monkeypatch.setattr(svc, "_is_yahoo", lambda: True)
+    monkeypatch.setattr(svc, "active_league", lambda: league)
+    assert svc._week_anchor() == (7, D1, D3)
+    league = replace(league, rolled_from_week=6)
+    assert svc._week_anchor() is None
+
+
+def test_opponent_streams_follow_the_same_deadline(monkeypatch, conn, tmp_path):
+    from fbm.analytics import streaming
+
+    seen = []
+    real = streaming.plan_streams
+
+    def spy(ctx, *args, **kwargs):
+        seen.append(ctx)
+        return real(ctx, *args, **kwargs)
+
+    monkeypatch.setattr(streaming, "plan_streams", spy)
+    for summary, tipped, start in ((HEADONE_TOMORROW, set(), D2), (HEAD_TODAY, {"FFF"}, D1)):
+        league = world(monkeypatch, conn, tmp_path, summary, tipped=tipped)
+        opp = league.team("t2")
+        _, _, _, _, _, _, my_plans, _ = svc._matchup(league, league.my_team, opp, None, 100)
+        assert svc._opponent_streaming(league, opp, my_plans, [D1, D2, D3], 2) is not None
+        assert seen[-1].start == start and seen[-1].tipped == {D1: tipped}
+
+
+def test_pct_risk_sits_only_shooters_below_the_impact_threshold(monkeypatch, conn, tmp_path):
+    # policy.pct_risk.max_impact is a (negative) G impact: only players whose FG%/FT% impact is below it sit. The
+    # option now really benches them (even with an open slot), so the threshold's sign matters.
+    league = world(monkeypatch, conn, tmp_path, HEAD_TODAY)  # A (+0.22 G per cat), B (-0.11), D (-0.22): D1 games
+    monkeypatch.setattr(svc, "_week_odds", lambda *a, **k: ({c.key: 0.5 for c in NINE_CAT}, "fbm_sim"))
+    base = policy.all_values(conn)
+
+    def starters(max_impact: float) -> dict[str, list[str]]:
+        params = {**base, "policy.pct_risk.enabled": True, "policy.pct_risk.max_impact": max_impact}
+        monkeypatch.setattr(svc._policy, "all_values", lambda c=None: params)
+        svc._lineup_plan(league, D1, True, "owner-ask", True)
+        row = conn.execute("SELECT options FROM decisions WHERE kind = 'lineup' ORDER BY id DESC LIMIT 1").fetchone()
+        return {o["id"]: o["spec"]["starters"] for o in json.loads(row["options"])}
+
+    out = starters(-0.15)
+    assert out["weighted"] == ["A", "B"] and out["pct_risk"] == ["A", "B"]  # only D is below -0.15 (he sits anyway)
+    assert starters(-0.1)["pct_risk"] == ["A"]  # B sits too, leaving a starting slot open
+    assert starters(-0.5)["pct_risk"] == ["A", "B"]  # nobody that bad

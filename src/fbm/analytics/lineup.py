@@ -141,9 +141,10 @@ def il_moves(
        or a game-time decision with no game) go into open IL slots (frees active spots). A game-time decision with a
        game today stays active: Yahoo's IL+ accepts him, but stashing him would cost the game.
     2. Activate: IL players no longer IL-eligible, then IL players whose status improved enough to play today and who
-       have a game (`playing`: player_ids with a game today), move to the bench if an active spot is open; otherwise
-       the move is `blocked` (a drop must be proposed; while an ineligible player sits in IL, Yahoo blocks every
-       roster move until it is resolved).
+       have a game (`playing`: player_ids with a game today), move to the bench if an active spot is open. Otherwise
+       an ineligible player's move is `blocked` (a drop must be proposed; while he sits in IL, Yahoo blocks every
+       roster move until it is resolved); a still-eligible player simply stays on IL (no move: nothing is blocked,
+       and the week plan's `waiting` reports the spot he needs).
     Players whose games have started (`locked`) are left alone.
     """
     locked_ids = set(locked)
@@ -194,14 +195,10 @@ def il_moves(
             moves.append(IlMove(p.player_id, p.name, p.selected, "BN", why))
             used[p.selected] -= 1
             active += 1
-        else:
-            full = (
-                "healthy but the roster is full: drop someone to activate (proposal needed)"
-                if p in must
-                else f"{p.status or 'healthy'} with a game today but the roster is full: drop someone to activate "
-                "him (proposal needed) or leave him on IL"
-            )
-            moves.append(IlMove(p.player_id, p.name, p.selected, p.selected, full, True))
+        elif p in must:
+            reason = "healthy but the roster is full: drop someone to activate (proposal needed)"
+            moves.append(IlMove(p.player_id, p.name, p.selected, p.selected, reason, True))
+        # else: still IL-eligible, so nothing is blocked: he stays on IL (week plans report the spot he needs)
     # 3. Stash remaining injured players into slots freed by activations.
     stash_into_open_slots()
     return moves
@@ -210,9 +207,10 @@ def il_moves(
 def activate_ready(
     players: Sequence[RosterPlayer], capacity: int, value: Mapping[str, float] | None = None
 ) -> tuple[list[RosterPlayer], tuple[str, ...], tuple[str, ...]]:
-    """Week planning: IL/IL+ players able to play (status not Out, e.g. from their ESPN return date via `as_of`) move
-    to the bench, best value first, while an active roster spot is open (Yahoo needs one to activate a player) or an
-    Out active player eligible for the freed IL slot can take it (a swap). `capacity` = active (non-IL) spots.
+    """Week planning: IL/IL+ players able to play (not `expected_out_today`: healthy, a game-time decision, or back
+    from their ESPN return date via `as_of`; Out, out-for-season and doubtful players stay) move to the bench, best
+    value first, while an active roster spot is open (Yahoo needs one to activate a player) or an active player not
+    expected to play who is eligible for the freed IL slot can take it (a swap). `capacity` = active (non-IL) spots.
 
     Returns (roster, activated ids, waiting ids): waiting players are ready to play but have no spot (a drop is
     needed). The input players are not mutated."""
@@ -221,7 +219,8 @@ def activate_ready(
     index = {p.player_id: i for i, p in enumerate(out)}
     active = sum(1 for p in out if p.selected not in IL_SLOTS)
     ready = sorted(
-        (p for p in out if p.selected in IL_SLOTS and not p.is_out), key=lambda p: -float(value.get(p.player_id, 0.0))
+        (p for p in out if p.selected in IL_SLOTS and not expected_out_today(p)),
+        key=lambda p: -float(value.get(p.player_id, 0.0)),
     )
     activated: list[str] = []
     waiting: list[str] = []
@@ -229,7 +228,10 @@ def activate_ready(
         if active < capacity:
             active += 1
         else:
-            swap = next((q for q in out if q.selected not in IL_SLOTS and q.is_out and r.selected in q.eligible), None)
+            swap = next(
+                (q for q in out if q.selected not in IL_SLOTS and expected_out_today(q) and r.selected in q.eligible),
+                None,
+            )
             if swap is None:
                 waiting.append(r.player_id)
                 continue
