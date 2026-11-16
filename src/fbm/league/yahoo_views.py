@@ -24,6 +24,11 @@ def category_value(cat: Category, stats: dict[str, str]) -> float | None:
     """A team's weekly value in one category from Yahoo raw stats (percentages from makes/attempts)."""
     cols = banked_stats(stats)
     if cat.kind == "pct":
+        if cat.att not in cols:  # no makes/attempts sent (the Flaim route): Yahoo's own percentage
+            try:
+                return round(float(stats[cat.yahoo_stat_id]), 4)
+            except (KeyError, ValueError):
+                return None
         att = cols.get(cat.att)
         return round(cols.get(cat.made, 0.0) / att, 4) if att else None
     return cols.get(cat.stat)

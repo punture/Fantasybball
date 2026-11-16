@@ -1,0 +1,250 @@
+{
+ "success": true,
+ "data": {
+  "leagueId": "466.l.4242",
+  "teamId": "1",
+  "teamKey": "466.l.4242.t.1",
+  "teamName": "Glass Cleaners",
+  "ownerName": "Owner",
+  "snapshot": {
+   "type": "current"
+  },
+  "players": [
+   {
+    "playerKey": "466.p.6001",
+    "playerId": "6001",
+    "name": "Tyrese Haliburton",
+    "team": "IND",
+    "position": "PG",
+    "selectedPosition": "PG",
+    "status": null,
+    "eligiblePositions": [
+     "PG",
+     "G",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.6002",
+    "playerId": "6002",
+    "name": "Devin Booker",
+    "team": "PHO",
+    "position": "PG,SG",
+    "selectedPosition": "SG",
+    "status": null,
+    "eligiblePositions": [
+     "PG",
+     "SG",
+     "G",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.6003",
+    "playerId": "6003",
+    "name": "Jalen Brunson",
+    "team": "NY",
+    "position": "PG",
+    "selectedPosition": "G",
+    "status": null,
+    "eligiblePositions": [
+     "PG",
+     "G",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.6004",
+    "playerId": "6004",
+    "name": "Mikal Bridges",
+    "team": "NY",
+    "position": "SG,SF",
+    "selectedPosition": "SF",
+    "status": null,
+    "eligiblePositions": [
+     "SG",
+     "SF",
+     "G",
+     "F",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.6005",
+    "playerId": "6005",
+    "name": "Jaren Jackson Jr.",
+    "team": "MEM",
+    "position": "PF,C",
+    "selectedPosition": "PF",
+    "status": null,
+    "eligiblePositions": [
+     "PF",
+     "C",
+     "F",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.6006",
+    "playerId": "6006",
+    "name": "Scottie Barnes",
+    "team": "TOR",
+    "position": "SF,PF",
+    "selectedPosition": "F",
+    "status": null,
+    "eligiblePositions": [
+     "SF",
+     "PF",
+     "F",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.6007",
+    "playerId": "6007",
+    "name": "Domantas Sabonis",
+    "team": "SAC",
+    "position": "C",
+    "selectedPosition": "C",
+    "status": null,
+    "eligiblePositions": [
+     "C",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.6008",
+    "playerId": "6008",
+    "name": "Nicolas Claxton",
+    "team": "BKN",
+    "position": "C",
+    "selectedPosition": "C",
+    "status": "GTD",
+    "eligiblePositions": [
+     "C",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.6009",
+    "playerId": "6009",
+    "name": "Derrick White",
+    "team": "BOS",
+    "position": "PG,SG",
+    "selectedPosition": "Util",
+    "status": null,
+    "eligiblePositions": [
+     "PG",
+     "SG",
+     "G",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.6010",
+    "playerId": "6010",
+    "name": "Jalen Williams",
+    "team": "OKC",
+    "position": "SG,SF",
+    "selectedPosition": "Util",
+    "status": null,
+    "eligiblePositions": [
+     "SG",
+     "SF",
+     "G",
+     "F",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.6011",
+    "playerId": "6011",
+    "name": "Tobias Harris",
+    "team": "DET",
+    "position": "SF,PF",
+    "selectedPosition": "BN",
+    "status": null,
+    "eligiblePositions": [
+     "SF",
+     "PF",
+     "F",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.6012",
+    "playerId": "6012",
+    "name": "Naz Reid",
+    "team": "MIN",
+    "position": "PF,C",
+    "selectedPosition": "BN",
+    "status": null,
+    "eligiblePositions": [
+     "PF",
+     "C",
+     "F",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.6013",
+    "playerId": "6013",
+    "name": "Keegan Murray",
+    "team": "SAC",
+    "position": "SF,PF",
+    "selectedPosition": "BN",
+    "status": null,
+    "eligiblePositions": [
+     "SF",
+     "PF",
+     "F",
+     "Util"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   },
+   {
+    "playerKey": "466.p.6014",
+    "playerId": "6014",
+    "name": "Kristaps Porzingis",
+    "team": "ATL",
+    "position": "PF,C",
+    "selectedPosition": "IL",
+    "status": "INJ",
+    "eligiblePositions": [
+     "PF",
+     "C",
+     "F",
+     "Util",
+     "IL"
+    ],
+    "isUndroppable": false,
+    "isEditable": true
+   }
+  ]
+ }
+}

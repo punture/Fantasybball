@@ -17,6 +17,7 @@ YAHOO_WEB_SESSION = "yahoo_web_session"
 HASHTAG_WEB_SESSION = "hashtag_web_session"  # Hashtag Basketball Premium sign-in cookies (put_large/get_large)
 GMAIL_ADDRESS = "gmail_address"
 GMAIL_APP_PASSWORD = "gmail_app_password"
+FLAIM_OAUTH = "flaim_oauth"  # Flaim sign-in: OAuth client + tokens as one JSON blob (put_large/get_large)
 
 # Windows Credential Manager caps one secret at 1280 characters; larger values are split across numbered entries.
 CHUNK_CHARS = 1000

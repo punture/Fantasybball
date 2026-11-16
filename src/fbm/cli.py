@@ -28,6 +28,7 @@ from fbm.config import (
 from fbm.data import queries, sync
 from fbm.data.espn import EspnClient
 from fbm.data.espn import current_season as espn_current_season
+from fbm.flaim.route import league_client
 from fbm.store import db as store
 from fbm.timeutil import ET, nba_today, parse_date
 from fbm.yahoo import discovery
@@ -40,7 +41,7 @@ from fbm.yahoo.auth import (
     extract_code,
     store_token_response,
 )
-from fbm.yahoo.client import YahooAPIError, YahooClient
+from fbm.yahoo.client import YahooAPIError
 from fbm.yahoo.roster import get_roster
 
 app = typer.Typer(no_args_is_help=True, help="FBM — AI front office for Yahoo Fantasy Basketball (9-cat H2H).")
@@ -165,7 +166,7 @@ def auth(
 
 
 def _select_league(league_key: str | None) -> LeagueConfig:
-    with YahooClient() as client:
+    with league_client() as client:
         leagues = discovery.list_nba_leagues(client)
         teams = discovery.list_my_nba_teams(client)
     if not leagues:
@@ -226,7 +227,7 @@ def league_list() -> None:
     """List your Yahoo NBA leagues for the current season."""
 
     def _list() -> None:
-        with YahooClient() as client:
+        with league_client() as client:
             _print_leagues(discovery.list_nba_leagues(client))
 
     _run(_list)
@@ -253,6 +254,10 @@ def status() -> None:
     console.print(
         f"Yahoo web session: {'[green]set[/] (active route)' if web_session.load() else 'none'} (`fbm yahoo status`)"
     )
+    from fbm.flaim.route import LABELS, is_flaim
+
+    if is_flaim():
+        console.print(f"Yahoo route: [bold]flaim[/] ({LABELS['flaim']}; `fbm flaim status`)")
     try:
         cfg = load_league_config()
         console.print(
@@ -271,7 +276,7 @@ def settings(
 
     def _settings() -> None:
         cfg = load_league_config()
-        with YahooClient() as client:
+        with league_client() as client:
             raw = yahoo_settings.fetch_settings(client, cfg.league_key)
         summary = yahoo_settings.summarize(raw)
         console.print(yahoo_settings.to_markdown(summary))
@@ -299,7 +304,7 @@ def roster(
     def _roster() -> None:
         cfg = load_league_config()
         target = _resolve_day(day, nba_today())
-        with YahooClient() as client:
+        with league_client() as client:
             r = get_roster(client, cfg.team_key, target)
         table = Table(title=f"{cfg.team_name} — {target} (editable: {r.is_editable})")
         for col in ("Slot", "Player", "Team", "Eligible", "Status"):
@@ -1291,6 +1296,7 @@ def dashboard(port: int = typer.Option(8501, help="Local port."), open_browser: 
 from fbm import (  # noqa: E402,F401  (each module registers its commands on `app`)
     cli_agent,  # `fbm agent`
     cli_automation,  # `fbm automation`
+    cli_flaim,  # `fbm flaim` (the Yahoo league through Flaim)
     cli_hashtag,  # `fbm hashtag` (Hashtag Basketball Premium)
     cli_migrate,  # `fbm migrate` (one-off local data migrations)
     cli_setup,  # setup, backup, sync-memory

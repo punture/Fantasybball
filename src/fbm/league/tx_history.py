@@ -96,6 +96,10 @@ def load(conn: sqlite3.Connection) -> list[Transaction]:
 
 def sync(conn: sqlite3.Connection, client: Any, league_key: str) -> dict[str, Any]:
     """Page backwards (newest first) until a page reaches a known transaction, is short, or the page cap."""
+    if getattr(client, "is_flaim", False):  # Flaim reads history by date range, not by page
+        from fbm.flaim.league import sync_transactions
+
+        return sync_transactions(conn, client)
     known = known_keys(conn)
     size, cap = int(C("intel.sync_page_size")), int(C("intel.sync_max_pages"))
     fetched: list[Transaction] = []

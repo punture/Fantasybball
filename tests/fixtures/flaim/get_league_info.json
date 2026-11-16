@@ -1,0 +1,160 @@
+{
+ "success": true,
+ "data": {
+  "leagueKey": "466.l.4242",
+  "leagueId": "4242",
+  "name": "Hardwood Classic",
+  "url": "https://basketball.fantasysports.yahoo.com/nba/4242",
+  "numTeams": 12,
+  "scoringType": "head",
+  "scoringFormat": "categories",
+  "currentWeek": 5,
+  "startWeek": 1,
+  "endWeek": 21,
+  "startDate": "2026-10-20",
+  "endDate": "2027-04-12",
+  "isFinished": false,
+  "draftStatus": "postdraft",
+  "draftType": "live",
+  "isAuctionDraft": false,
+  "canTradeDraftPicks": false,
+  "waiverType": "R",
+  "waiverRule": "continuous",
+  "waiverTime": 2,
+  "postDraftPlayers": "W",
+  "cantCutList": "yahoo",
+  "maxWeeklyAdds": 4,
+  "weeklyDeadline": "intraday",
+  "rosterPositions": [
+   {
+    "position": "PG",
+    "count": 1,
+    "isStartingPosition": true
+   },
+   {
+    "position": "SG",
+    "count": 1,
+    "isStartingPosition": true
+   },
+   {
+    "position": "G",
+    "count": 1,
+    "isStartingPosition": true
+   },
+   {
+    "position": "SF",
+    "count": 1,
+    "isStartingPosition": true
+   },
+   {
+    "position": "PF",
+    "count": 1,
+    "isStartingPosition": true
+   },
+   {
+    "position": "F",
+    "count": 1,
+    "isStartingPosition": true
+   },
+   {
+    "position": "C",
+    "count": 2,
+    "isStartingPosition": true
+   },
+   {
+    "position": "Util",
+    "count": 2,
+    "isStartingPosition": true
+   },
+   {
+    "position": "BN",
+    "count": 3,
+    "isStartingPosition": false
+   },
+   {
+    "position": "IL",
+    "count": 2,
+    "isStartingPosition": false
+   },
+   {
+    "position": "IL+",
+    "count": 1,
+    "isStartingPosition": false
+   }
+  ],
+  "teams": [
+   {
+    "teamKey": "466.l.4242.t.1",
+    "teamId": "1",
+    "teamName": "Glass Cleaners",
+    "ownerName": "Owner"
+   },
+   {
+    "teamKey": "466.l.4242.t.2",
+    "teamId": "2",
+    "teamName": "Bench Mob",
+    "ownerName": "Rival"
+   },
+   {
+    "teamKey": "466.l.4242.t.3",
+    "teamId": "3",
+    "teamName": "Pick and Rollers",
+    "ownerName": "Casey"
+   },
+   {
+    "teamKey": "466.l.4242.t.4",
+    "teamId": "4",
+    "teamName": "Splash Zone",
+    "ownerName": "Jordan"
+   },
+   {
+    "teamKey": "466.l.4242.t.5",
+    "teamId": "5",
+    "teamName": "Full Court Press",
+    "ownerName": "Morgan"
+   },
+   {
+    "teamKey": "466.l.4242.t.6",
+    "teamId": "6",
+    "teamName": "Paint Protectors",
+    "ownerName": "Riley"
+   },
+   {
+    "teamKey": "466.l.4242.t.7",
+    "teamId": "7",
+    "teamName": "Box Out Bandits",
+    "ownerName": "Taylor"
+   },
+   {
+    "teamKey": "466.l.4242.t.8",
+    "teamId": "8",
+    "teamName": "Fast Breakers",
+    "ownerName": "Avery"
+   },
+   {
+    "teamKey": "466.l.4242.t.9",
+    "teamId": "9",
+    "teamName": "Triple Threat",
+    "ownerName": "Quinn"
+   },
+   {
+    "teamKey": "466.l.4242.t.10",
+    "teamId": "10",
+    "teamName": "Zone Busters",
+    "ownerName": "Drew"
+   },
+   {
+    "teamKey": "466.l.4242.t.11",
+    "teamId": "11",
+    "teamName": "Hook Shots",
+    "ownerName": "Parker"
+   },
+   {
+    "teamKey": "466.l.4242.t.12",
+    "teamId": "12",
+    "teamName": "Second Chancers",
+    "ownerName": "Rowan"
+   }
+  ]
+ }
+}

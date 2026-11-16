@@ -16,6 +16,8 @@ def _user_games(fc: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def list_nba_leagues(client: YahooClient) -> list[dict[str, str]]:
+    if getattr(client, "is_flaim", False):  # the Flaim route (fbm.flaim.reads.FlaimLeague)
+        return client.leagues()
     fc = client.get("users;use_login=1/games;game_keys=nba/leagues")
     leagues: list[dict[str, str]] = []
     for game in _user_games(fc):
@@ -37,6 +39,8 @@ def list_nba_leagues(client: YahooClient) -> list[dict[str, str]]:
 
 
 def list_my_nba_teams(client: YahooClient) -> list[dict[str, str]]:
+    if getattr(client, "is_flaim", False):  # the Flaim route (fbm.flaim.reads.FlaimLeague)
+        return client.my_teams()
     fc = client.get("users;use_login=1/games;game_keys=nba/teams")
     teams: list[dict[str, str]] = []
     for game in _user_games(fc):

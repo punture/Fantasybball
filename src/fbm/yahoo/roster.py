@@ -62,5 +62,7 @@ def parse_roster(fc: dict[str, Any], team_key: str, day: date) -> Roster:
 
 
 def get_roster(client: YahooClient, team_key: str, day: date) -> Roster:
+    if getattr(client, "is_flaim", False):  # the Flaim route (fbm.flaim.reads.FlaimLeague)
+        return client.roster(team_key, day)
     fc = client.get(f"team/{team_key}/roster;date={day.isoformat()}")
     return parse_roster(fc, team_key, day)

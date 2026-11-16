@@ -92,6 +92,8 @@ def parse_teams(fc: dict[str, Any]) -> list[YahooTeam]:
 
 
 def fetch_teams(client: YahooClient, league_key: str) -> list[YahooTeam]:
+    if getattr(client, "is_flaim", False):  # the Flaim route (fbm.flaim.reads.FlaimLeague)
+        return client.teams(league_key)
     return parse_teams(client.get(f"league/{league_key}/teams"))
 
 
@@ -134,6 +136,8 @@ def parse_standings(fc: dict[str, Any]) -> list[StandingRow]:
 
 
 def fetch_standings(client: YahooClient, league_key: str) -> list[StandingRow]:
+    if getattr(client, "is_flaim", False):  # the Flaim route (fbm.flaim.reads.FlaimLeague)
+        return client.standings(league_key)
     return parse_standings(client.get(f"league/{league_key}/standings"))
 
 
@@ -204,6 +208,8 @@ def parse_scoreboard(fc: dict[str, Any]) -> list[Matchup]:
 
 
 def fetch_scoreboard(client: YahooClient, league_key: str, week: int | None = None) -> list[Matchup]:
+    if getattr(client, "is_flaim", False):  # the Flaim route (fbm.flaim.reads.FlaimLeague)
+        return client.scoreboard(league_key, week)
     suffix = f";week={week}" if week else ""
     return parse_scoreboard(client.get(f"league/{league_key}/scoreboard{suffix}"))
 
@@ -279,6 +285,8 @@ def fetch_players(
     client: YahooClient, league_key: str, status: str = "W", limit: int = 100, page: int = 25
 ) -> list[YahooPlayer]:
     """Players by status (W = on waivers, FA = free agents, A = all available), with ownership (waiver dates)."""
+    if getattr(client, "is_flaim", False):  # the Flaim route (fbm.flaim.reads.FlaimLeague)
+        return client.players(league_key, status, limit)
     out: list[YahooPlayer] = []
     start = 0
     while start < limit:
@@ -361,6 +369,8 @@ def parse_transactions(fc: dict[str, Any]) -> list[Transaction]:
 
 def fetch_transactions(client: YahooClient, league_key: str, count: int = 50, start: int = 0) -> list[Transaction]:
     """Newest first; `start` pages backwards through history."""
+    if getattr(client, "is_flaim", False):  # the Flaim route (fbm.flaim.reads.FlaimLeague)
+        return client.transactions(league_key, count, start)
     paging = f";start={start}" if start else ""
     return parse_transactions(
         client.get(f"league/{league_key}/transactions;types=add,drop,trade{paging};count={count}")
@@ -369,5 +379,7 @@ def fetch_transactions(client: YahooClient, league_key: str, count: int = 50, st
 
 def fetch_pending(client: YahooClient, league_key: str, team_key: str) -> list[Transaction]:
     """My pending waiver claims and pending trades (offers I sent or received)."""
+    if getattr(client, "is_flaim", False):  # the Flaim route (fbm.flaim.reads.FlaimLeague)
+        return client.pending(league_key, team_key)
     path = f"league/{league_key}/transactions;types=waiver,pending_trade;team_key={team_key}"
     return parse_transactions(client.get(path))

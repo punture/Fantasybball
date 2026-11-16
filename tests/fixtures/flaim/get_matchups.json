@@ -1,0 +1,971 @@
+{
+ "success": true,
+ "data": {
+  "leagueKey": "466.l.4242",
+  "leagueName": "Hardwood Classic",
+  "currentWeek": 5,
+  "matchupWeek": 5,
+  "matchups": [
+   {
+    "matchupId": 1,
+    "home": {
+     "teamKey": "466.l.4242.t.1",
+     "teamId": "1",
+     "teamName": "Glass Cleaners",
+     "points": 5,
+     "categoryScore": {
+      "wins": 5,
+      "losses": 3,
+      "ties": 1
+     },
+     "categories": [
+      {
+       "statId": "5",
+       "name": "FG%",
+       "displayName": "FG%",
+       "value": ".482",
+       "result": "win"
+      },
+      {
+       "statId": "8",
+       "name": "FT%",
+       "displayName": "FT%",
+       "value": ".791",
+       "result": "loss"
+      },
+      {
+       "statId": "10",
+       "name": "3PTM",
+       "displayName": "3PTM",
+       "value": 22,
+       "result": "loss"
+      },
+      {
+       "statId": "12",
+       "name": "PTS",
+       "displayName": "PTS",
+       "value": 301,
+       "result": "win"
+      },
+      {
+       "statId": "15",
+       "name": "REB",
+       "displayName": "REB",
+       "value": 128,
+       "result": "loss"
+      },
+      {
+       "statId": "16",
+       "name": "AST",
+       "displayName": "AST",
+       "value": 74,
+       "result": "win"
+      },
+      {
+       "statId": "17",
+       "name": "ST",
+       "displayName": "ST",
+       "value": 15,
+       "result": "tie"
+      },
+      {
+       "statId": "18",
+       "name": "BLK",
+       "displayName": "BLK",
+       "value": 11,
+       "result": "loss"
+      },
+      {
+       "statId": "19",
+       "name": "TO",
+       "displayName": "TO",
+       "value": 31,
+       "result": "win"
+      }
+     ],
+     "gamesRemaining": 33,
+     "winProbability": 0.62
+    },
+    "away": {
+     "teamKey": "466.l.4242.t.2",
+     "teamId": "2",
+     "teamName": "Bench Mob",
+     "points": 3,
+     "categoryScore": {
+      "wins": 3,
+      "losses": 5,
+      "ties": 1
+     },
+     "categories": [
+      {
+       "statId": "5",
+       "name": "FG%",
+       "displayName": "FG%",
+       "value": ".455",
+       "result": "loss"
+      },
+      {
+       "statId": "8",
+       "name": "FT%",
+       "displayName": "FT%",
+       "value": ".820",
+       "result": "win"
+      },
+      {
+       "statId": "10",
+       "name": "3PTM",
+       "displayName": "3PTM",
+       "value": 25,
+       "result": "win"
+      },
+      {
+       "statId": "12",
+       "name": "PTS",
+       "displayName": "PTS",
+       "value": 288,
+       "result": "loss"
+      },
+      {
+       "statId": "15",
+       "name": "REB",
+       "displayName": "REB",
+       "value": 136,
+       "result": "win"
+      },
+      {
+       "statId": "16",
+       "name": "AST",
+       "displayName": "AST",
+       "value": 70,
+       "result": "loss"
+      },
+      {
+       "statId": "17",
+       "name": "ST",
+       "displayName": "ST",
+       "value": 15,
+       "result": "tie"
+      },
+      {
+       "statId": "18",
+       "name": "BLK",
+       "displayName": "BLK",
+       "value": 14,
+       "result": "win"
+      },
+      {
+       "statId": "19",
+       "name": "TO",
+       "displayName": "TO",
+       "value": 35,
+       "result": "loss"
+      }
+     ],
+     "gamesRemaining": 30,
+     "winProbability": 0.38
+    },
+    "status": "in_progress"
+   },
+   {
+    "matchupId": 2,
+    "home": {
+     "teamKey": "466.l.4242.t.3",
+     "teamId": "3",
+     "teamName": "Pick and Rollers",
+     "points": 0,
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categories": [
+      {
+       "statId": "5",
+       "name": "FG%",
+       "displayName": "FG%",
+       "value": ".470",
+       "result": "tie"
+      },
+      {
+       "statId": "8",
+       "name": "FT%",
+       "displayName": "FT%",
+       "value": ".780",
+       "result": "tie"
+      },
+      {
+       "statId": "10",
+       "name": "3PTM",
+       "displayName": "3PTM",
+       "value": 20,
+       "result": "tie"
+      },
+      {
+       "statId": "12",
+       "name": "PTS",
+       "displayName": "PTS",
+       "value": 280,
+       "result": "tie"
+      },
+      {
+       "statId": "15",
+       "name": "REB",
+       "displayName": "REB",
+       "value": 120,
+       "result": "tie"
+      },
+      {
+       "statId": "16",
+       "name": "AST",
+       "displayName": "AST",
+       "value": 60,
+       "result": "tie"
+      },
+      {
+       "statId": "17",
+       "name": "ST",
+       "displayName": "ST",
+       "value": 12,
+       "result": "tie"
+      },
+      {
+       "statId": "18",
+       "name": "BLK",
+       "displayName": "BLK",
+       "value": 10,
+       "result": "tie"
+      },
+      {
+       "statId": "19",
+       "name": "TO",
+       "displayName": "TO",
+       "value": 28,
+       "result": "tie"
+      }
+     ],
+     "gamesRemaining": 31,
+     "winProbability": 0.38
+    },
+    "away": {
+     "teamKey": "466.l.4242.t.4",
+     "teamId": "4",
+     "teamName": "Splash Zone",
+     "points": 0,
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categories": [
+      {
+       "statId": "5",
+       "name": "FG%",
+       "displayName": "FG%",
+       "value": ".470",
+       "result": "tie"
+      },
+      {
+       "statId": "8",
+       "name": "FT%",
+       "displayName": "FT%",
+       "value": ".780",
+       "result": "tie"
+      },
+      {
+       "statId": "10",
+       "name": "3PTM",
+       "displayName": "3PTM",
+       "value": 20,
+       "result": "tie"
+      },
+      {
+       "statId": "12",
+       "name": "PTS",
+       "displayName": "PTS",
+       "value": 280,
+       "result": "tie"
+      },
+      {
+       "statId": "15",
+       "name": "REB",
+       "displayName": "REB",
+       "value": 120,
+       "result": "tie"
+      },
+      {
+       "statId": "16",
+       "name": "AST",
+       "displayName": "AST",
+       "value": 60,
+       "result": "tie"
+      },
+      {
+       "statId": "17",
+       "name": "ST",
+       "displayName": "ST",
+       "value": 12,
+       "result": "tie"
+      },
+      {
+       "statId": "18",
+       "name": "BLK",
+       "displayName": "BLK",
+       "value": 10,
+       "result": "tie"
+      },
+      {
+       "statId": "19",
+       "name": "TO",
+       "displayName": "TO",
+       "value": 28,
+       "result": "tie"
+      }
+     ],
+     "gamesRemaining": 31,
+     "winProbability": 0.38
+    },
+    "status": "in_progress"
+   },
+   {
+    "matchupId": 3,
+    "home": {
+     "teamKey": "466.l.4242.t.5",
+     "teamId": "5",
+     "teamName": "Full Court Press",
+     "points": 0,
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categories": [
+      {
+       "statId": "5",
+       "name": "FG%",
+       "displayName": "FG%",
+       "value": ".470",
+       "result": "tie"
+      },
+      {
+       "statId": "8",
+       "name": "FT%",
+       "displayName": "FT%",
+       "value": ".780",
+       "result": "tie"
+      },
+      {
+       "statId": "10",
+       "name": "3PTM",
+       "displayName": "3PTM",
+       "value": 20,
+       "result": "tie"
+      },
+      {
+       "statId": "12",
+       "name": "PTS",
+       "displayName": "PTS",
+       "value": 280,
+       "result": "tie"
+      },
+      {
+       "statId": "15",
+       "name": "REB",
+       "displayName": "REB",
+       "value": 120,
+       "result": "tie"
+      },
+      {
+       "statId": "16",
+       "name": "AST",
+       "displayName": "AST",
+       "value": 60,
+       "result": "tie"
+      },
+      {
+       "statId": "17",
+       "name": "ST",
+       "displayName": "ST",
+       "value": 12,
+       "result": "tie"
+      },
+      {
+       "statId": "18",
+       "name": "BLK",
+       "displayName": "BLK",
+       "value": 10,
+       "result": "tie"
+      },
+      {
+       "statId": "19",
+       "name": "TO",
+       "displayName": "TO",
+       "value": 28,
+       "result": "tie"
+      }
+     ],
+     "gamesRemaining": 31,
+     "winProbability": 0.38
+    },
+    "away": {
+     "teamKey": "466.l.4242.t.6",
+     "teamId": "6",
+     "teamName": "Paint Protectors",
+     "points": 0,
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categories": [
+      {
+       "statId": "5",
+       "name": "FG%",
+       "displayName": "FG%",
+       "value": ".470",
+       "result": "tie"
+      },
+      {
+       "statId": "8",
+       "name": "FT%",
+       "displayName": "FT%",
+       "value": ".780",
+       "result": "tie"
+      },
+      {
+       "statId": "10",
+       "name": "3PTM",
+       "displayName": "3PTM",
+       "value": 20,
+       "result": "tie"
+      },
+      {
+       "statId": "12",
+       "name": "PTS",
+       "displayName": "PTS",
+       "value": 280,
+       "result": "tie"
+      },
+      {
+       "statId": "15",
+       "name": "REB",
+       "displayName": "REB",
+       "value": 120,
+       "result": "tie"
+      },
+      {
+       "statId": "16",
+       "name": "AST",
+       "displayName": "AST",
+       "value": 60,
+       "result": "tie"
+      },
+      {
+       "statId": "17",
+       "name": "ST",
+       "displayName": "ST",
+       "value": 12,
+       "result": "tie"
+      },
+      {
+       "statId": "18",
+       "name": "BLK",
+       "displayName": "BLK",
+       "value": 10,
+       "result": "tie"
+      },
+      {
+       "statId": "19",
+       "name": "TO",
+       "displayName": "TO",
+       "value": 28,
+       "result": "tie"
+      }
+     ],
+     "gamesRemaining": 31,
+     "winProbability": 0.38
+    },
+    "status": "in_progress"
+   },
+   {
+    "matchupId": 4,
+    "home": {
+     "teamKey": "466.l.4242.t.7",
+     "teamId": "7",
+     "teamName": "Box Out Bandits",
+     "points": 0,
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categories": [
+      {
+       "statId": "5",
+       "name": "FG%",
+       "displayName": "FG%",
+       "value": ".470",
+       "result": "tie"
+      },
+      {
+       "statId": "8",
+       "name": "FT%",
+       "displayName": "FT%",
+       "value": ".780",
+       "result": "tie"
+      },
+      {
+       "statId": "10",
+       "name": "3PTM",
+       "displayName": "3PTM",
+       "value": 20,
+       "result": "tie"
+      },
+      {
+       "statId": "12",
+       "name": "PTS",
+       "displayName": "PTS",
+       "value": 280,
+       "result": "tie"
+      },
+      {
+       "statId": "15",
+       "name": "REB",
+       "displayName": "REB",
+       "value": 120,
+       "result": "tie"
+      },
+      {
+       "statId": "16",
+       "name": "AST",
+       "displayName": "AST",
+       "value": 60,
+       "result": "tie"
+      },
+      {
+       "statId": "17",
+       "name": "ST",
+       "displayName": "ST",
+       "value": 12,
+       "result": "tie"
+      },
+      {
+       "statId": "18",
+       "name": "BLK",
+       "displayName": "BLK",
+       "value": 10,
+       "result": "tie"
+      },
+      {
+       "statId": "19",
+       "name": "TO",
+       "displayName": "TO",
+       "value": 28,
+       "result": "tie"
+      }
+     ],
+     "gamesRemaining": 31,
+     "winProbability": 0.38
+    },
+    "away": {
+     "teamKey": "466.l.4242.t.8",
+     "teamId": "8",
+     "teamName": "Fast Breakers",
+     "points": 0,
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categories": [
+      {
+       "statId": "5",
+       "name": "FG%",
+       "displayName": "FG%",
+       "value": ".470",
+       "result": "tie"
+      },
+      {
+       "statId": "8",
+       "name": "FT%",
+       "displayName": "FT%",
+       "value": ".780",
+       "result": "tie"
+      },
+      {
+       "statId": "10",
+       "name": "3PTM",
+       "displayName": "3PTM",
+       "value": 20,
+       "result": "tie"
+      },
+      {
+       "statId": "12",
+       "name": "PTS",
+       "displayName": "PTS",
+       "value": 280,
+       "result": "tie"
+      },
+      {
+       "statId": "15",
+       "name": "REB",
+       "displayName": "REB",
+       "value": 120,
+       "result": "tie"
+      },
+      {
+       "statId": "16",
+       "name": "AST",
+       "displayName": "AST",
+       "value": 60,
+       "result": "tie"
+      },
+      {
+       "statId": "17",
+       "name": "ST",
+       "displayName": "ST",
+       "value": 12,
+       "result": "tie"
+      },
+      {
+       "statId": "18",
+       "name": "BLK",
+       "displayName": "BLK",
+       "value": 10,
+       "result": "tie"
+      },
+      {
+       "statId": "19",
+       "name": "TO",
+       "displayName": "TO",
+       "value": 28,
+       "result": "tie"
+      }
+     ],
+     "gamesRemaining": 31,
+     "winProbability": 0.38
+    },
+    "status": "in_progress"
+   },
+   {
+    "matchupId": 5,
+    "home": {
+     "teamKey": "466.l.4242.t.9",
+     "teamId": "9",
+     "teamName": "Triple Threat",
+     "points": 0,
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categories": [
+      {
+       "statId": "5",
+       "name": "FG%",
+       "displayName": "FG%",
+       "value": ".470",
+       "result": "tie"
+      },
+      {
+       "statId": "8",
+       "name": "FT%",
+       "displayName": "FT%",
+       "value": ".780",
+       "result": "tie"
+      },
+      {
+       "statId": "10",
+       "name": "3PTM",
+       "displayName": "3PTM",
+       "value": 20,
+       "result": "tie"
+      },
+      {
+       "statId": "12",
+       "name": "PTS",
+       "displayName": "PTS",
+       "value": 280,
+       "result": "tie"
+      },
+      {
+       "statId": "15",
+       "name": "REB",
+       "displayName": "REB",
+       "value": 120,
+       "result": "tie"
+      },
+      {
+       "statId": "16",
+       "name": "AST",
+       "displayName": "AST",
+       "value": 60,
+       "result": "tie"
+      },
+      {
+       "statId": "17",
+       "name": "ST",
+       "displayName": "ST",
+       "value": 12,
+       "result": "tie"
+      },
+      {
+       "statId": "18",
+       "name": "BLK",
+       "displayName": "BLK",
+       "value": 10,
+       "result": "tie"
+      },
+      {
+       "statId": "19",
+       "name": "TO",
+       "displayName": "TO",
+       "value": 28,
+       "result": "tie"
+      }
+     ],
+     "gamesRemaining": 31,
+     "winProbability": 0.38
+    },
+    "away": {
+     "teamKey": "466.l.4242.t.10",
+     "teamId": "10",
+     "teamName": "Zone Busters",
+     "points": 0,
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categories": [
+      {
+       "statId": "5",
+       "name": "FG%",
+       "displayName": "FG%",
+       "value": ".470",
+       "result": "tie"
+      },
+      {
+       "statId": "8",
+       "name": "FT%",
+       "displayName": "FT%",
+       "value": ".780",
+       "result": "tie"
+      },
+      {
+       "statId": "10",
+       "name": "3PTM",
+       "displayName": "3PTM",
+       "value": 20,
+       "result": "tie"
+      },
+      {
+       "statId": "12",
+       "name": "PTS",
+       "displayName": "PTS",
+       "value": 280,
+       "result": "tie"
+      },
+      {
+       "statId": "15",
+       "name": "REB",
+       "displayName": "REB",
+       "value": 120,
+       "result": "tie"
+      },
+      {
+       "statId": "16",
+       "name": "AST",
+       "displayName": "AST",
+       "value": 60,
+       "result": "tie"
+      },
+      {
+       "statId": "17",
+       "name": "ST",
+       "displayName": "ST",
+       "value": 12,
+       "result": "tie"
+      },
+      {
+       "statId": "18",
+       "name": "BLK",
+       "displayName": "BLK",
+       "value": 10,
+       "result": "tie"
+      },
+      {
+       "statId": "19",
+       "name": "TO",
+       "displayName": "TO",
+       "value": 28,
+       "result": "tie"
+      }
+     ],
+     "gamesRemaining": 31,
+     "winProbability": 0.38
+    },
+    "status": "in_progress"
+   },
+   {
+    "matchupId": 6,
+    "home": {
+     "teamKey": "466.l.4242.t.11",
+     "teamId": "11",
+     "teamName": "Hook Shots",
+     "points": 0,
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categories": [
+      {
+       "statId": "5",
+       "name": "FG%",
+       "displayName": "FG%",
+       "value": ".470",
+       "result": "tie"
+      },
+      {
+       "statId": "8",
+       "name": "FT%",
+       "displayName": "FT%",
+       "value": ".780",
+       "result": "tie"
+      },
+      {
+       "statId": "10",
+       "name": "3PTM",
+       "displayName": "3PTM",
+       "value": 20,
+       "result": "tie"
+      },
+      {
+       "statId": "12",
+       "name": "PTS",
+       "displayName": "PTS",
+       "value": 280,
+       "result": "tie"
+      },
+      {
+       "statId": "15",
+       "name": "REB",
+       "displayName": "REB",
+       "value": 120,
+       "result": "tie"
+      },
+      {
+       "statId": "16",
+       "name": "AST",
+       "displayName": "AST",
+       "value": 60,
+       "result": "tie"
+      },
+      {
+       "statId": "17",
+       "name": "ST",
+       "displayName": "ST",
+       "value": 12,
+       "result": "tie"
+      },
+      {
+       "statId": "18",
+       "name": "BLK",
+       "displayName": "BLK",
+       "value": 10,
+       "result": "tie"
+      },
+      {
+       "statId": "19",
+       "name": "TO",
+       "displayName": "TO",
+       "value": 28,
+       "result": "tie"
+      }
+     ],
+     "gamesRemaining": 31,
+     "winProbability": 0.38
+    },
+    "away": {
+     "teamKey": "466.l.4242.t.12",
+     "teamId": "12",
+     "teamName": "Second Chancers",
+     "points": 0,
+     "categoryScore": {
+      "wins": 0,
+      "losses": 0,
+      "ties": 9
+     },
+     "categories": [
+      {
+       "statId": "5",
+       "name": "FG%",
+       "displayName": "FG%",
+       "value": ".470",
+       "result": "tie"
+      },
+      {
+       "statId": "8",
+       "name": "FT%",
+       "displayName": "FT%",
+       "value": ".780",
+       "result": "tie"
+      },
+      {
+       "statId": "10",
+       "name": "3PTM",
+       "displayName": "3PTM",
+       "value": 20,
+       "result": "tie"
+      },
+      {
+       "statId": "12",
+       "name": "PTS",
+       "displayName": "PTS",
+       "value": 280,
+       "result": "tie"
+      },
+      {
+       "statId": "15",
+       "name": "REB",
+       "displayName": "REB",
+       "value": 120,
+       "result": "tie"
+      },
+      {
+       "statId": "16",
+       "name": "AST",
+       "displayName": "AST",
+       "value": 60,
+       "result": "tie"
+      },
+      {
+       "statId": "17",
+       "name": "ST",
+       "displayName": "ST",
+       "value": 12,
+       "result": "tie"
+      },
+      {
+       "statId": "18",
+       "name": "BLK",
+       "displayName": "BLK",
+       "value": 10,
+       "result": "tie"
+      },
+      {
+       "statId": "19",
+       "name": "TO",
+       "displayName": "TO",
+       "value": 28,
+       "result": "tie"
+      }
+     ],
+     "gamesRemaining": 31,
+     "winProbability": 0.38
+    },
+    "status": "in_progress"
+   }
+  ]
+ }
+}
