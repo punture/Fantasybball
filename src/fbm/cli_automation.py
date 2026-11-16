@@ -53,13 +53,17 @@ def run_cmd(
 @automation_app.command("install")
 def install_cmd(
     mode: str = typer.Option(None, "--mode", help="none | agent-app | scheduler | engine-only (default: settings)."),
-    jobs: str = typer.Option(None, "--jobs", help="Comma-separated jobs (default: settings [automation] jobs)."),
+    jobs: str = typer.Option(
+        None, "--jobs", help="Comma-separated jobs (default: settings [automation] jobs, else every engine-only job)."
+    ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print exactly what would be installed; change nothing."),
 ) -> None:
     """Install scheduled jobs for the chosen mode."""
     s = load_settings()
     mode = mode or s.automation_mode
     selected = _jobs(jobs, s.automation_jobs)
+    if mode == "engine-only" and jobs is None and not selected:  # no jobs in settings: every engine-capable job
+        selected = [name for name, job in auto.CATALOG.items() if job.engine_commands]
     errors = auto.validate(s.agent, mode, selected)
     if errors:
         for e in errors:

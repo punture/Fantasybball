@@ -2168,6 +2168,14 @@ def context_pack(
     except Exception as err:  # noqa: BLE001 - context must load; a broken check pauses suggestions in HT mode
         pack["hashtag"] = {"error": f"{type(err).__name__}: {err}"}
         pack["suggestions_paused"] = bool(settings.hashtag_enabled)
+    if pack.get("source") == "yahoo":  # league categories FBM can't model (ignored): say so loudly
+        from fbm.analytics.categories import category_support
+        from fbm.gm.health import read_league_summary
+
+        try:
+            pack["category_support"] = category_support(read_league_summary()).as_dict()
+        except Exception as err:  # noqa: BLE001 - context must load
+            pack["category_support"] = {"error": f"{type(err).__name__}: {err}"}
     pack["decision_policy"] = {
         "league_changes": "none: FBM gives insights, lineup recommendations and proposals; the owner makes every move",
         "proposal_flow": "create_proposal -> record_review -> record_owner_decision -> proposal_steps -> owner acts "

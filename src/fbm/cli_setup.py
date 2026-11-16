@@ -29,6 +29,14 @@ _AUTOMATION_HELP = {
     "scheduler": "the OS scheduler runs your agent headless (needs its CLI)",
     "engine-only": "the OS scheduler runs deterministic fbm jobs only, no AI",
 }
+_ROUTE_HELP = {
+    "flaim": "recommended: Flaim, a free hosted read-only connector with its own approved Yahoo access "
+    "(sign in at flaim.app, then `fbm flaim login`)",
+    "session": "your own Yahoo browser sign-in cookies (`fbm yahoo login`); undocumented by Yahoo, a Terms of "
+    "Service grey area",
+    "api": "your own approved Yahoo developer app (`fbm auth`); Yahoo approval takes 3-8 weeks",
+    "auto": "FBM's default: a saved Yahoo web session if any, else the official API",
+}
 
 
 def _choice(question: str, options: dict[str, str], default: str) -> str:
@@ -82,21 +90,33 @@ def _interactive(opts: wiz.SetupOptions, current: dict) -> None:
                 opts.jobs = jobs
                 break
             console.print("[red]Unknown job name.[/]")
-    if opts.league_source is None:
+    route = str(current.get("yahoo", {}).get("route") or "auto")
+    on_yahoo = current.get("league", {}).get("source", "demo") == "yahoo"
+    if opts.yahoo_route is None:
         console.print(
-            "\nYahoo's Fantasy API needs an approved application (https://sports.yahoo.com/developer/access/, "
-            "can take weeks). Until then FBM runs a demo league over real NBA players, or it can read your league "
-            "now through your own Yahoo sign-in (`fbm yahoo login`, read-only)."
+            "\nFBM reads your Yahoo league read-only (it never changes it). Until you connect, it runs a demo league "
+            "over real NBA players."
         )
-        opts.yahoo_approved = typer.confirm("Has Yahoo approved your API access?", default=False)
-        if not opts.yahoo_approved:
-            opts.yahoo_web_session = typer.confirm(
-                "Connect now with your Yahoo sign-in instead (opens a browser window once)?", default=True
-            )
+        # Recommend Flaim to new installs; a connected league keeps its route on Enter (switching needs a sign-in).
+        default = route if route != "auto" or on_yahoo else "flaim"
+        opts.yahoo_route = _choice("How should FBM read your Yahoo league?", _ROUTE_HELP, default)
+    if opts.league_source is None:
         opts.league_source = current.get("league", {}).get("source", "demo")
+        if opts.league_source != "yahoo" or opts.yahoo_route != route:
+            _ask_connect(opts)  # still on the demo, or the connected league moves to a new route
     notify = current.get("notify", {})
+    if opts.telegram is None:
+        channels = notify.get("channels")
+        opts.telegram = typer.confirm(
+            "\nLineup/injury alerts and a daily digest on Telegram (free; you create a bot)?",
+            default="telegram" in channels if isinstance(channels, list) else True,
+        )
     if opts.email is None:
-        opts.email = typer.confirm("\nEmail notifications via Gmail?", default=bool(notify.get("email_enabled")))
+        opts.email = typer.confirm("Email notifications via Gmail?", default=bool(notify.get("email_enabled")))
+    if opts.telegram or opts.email:
+        opts.notify_setup = typer.confirm(
+            "Run `fbm notify setup` after setup (type your bot token / app password into its prompts)?", default=True
+        )
     if opts.quiet_hours is None and opts.email:
         opts.quiet_hours = typer.prompt(
             "Quiet hours, local time (e.g. 23:00-07:00; empty = none)", default=notify.get("quiet_hours", "")
@@ -107,6 +127,53 @@ def _interactive(opts: wiz.SetupOptions, current: dict) -> None:
             default=float(current.get("proposals", {}).get("expiry_hours", 18)),
             type=float,
         )
+
+
+def _ask_connect(opts: wiz.SetupOptions) -> None:
+    """Still on the demo league: ask whether to connect Yahoo on the chosen route (run after settings are written)."""
+    route = opts.yahoo_route or "auto"
+    if route == "flaim":
+        console.print(
+            "First, for free: sign up at https://flaim.app and connect your Yahoo account at https://flaim.app/leagues."
+        )
+        opts.flaim_login = typer.confirm(
+            "Done? Connect FBM to Flaim after setup (`fbm flaim login`, opens a browser window once)", default=True
+        )
+    elif route == "session":
+        opts.yahoo_web_session = typer.confirm(
+            "Sign in to Yahoo after setup (`fbm yahoo login`, opens a browser window once)?", default=True
+        )
+    else:
+        opts.yahoo_approved = typer.confirm("Has Yahoo approved your API access?", default=False)
+        if not opts.yahoo_approved and route == "auto":
+            opts.yahoo_web_session = typer.confirm(
+                "Connect now with your Yahoo sign-in instead (opens a browser window once)?", default=True
+            )
+
+
+def _fbm(*args: str) -> bool:
+    """Run an fbm command in the foreground (its own prompts); True on success."""
+    return subprocess.run(wiz.fbm_command(*args), check=False).returncode == 0
+
+
+def _flaim_interactive() -> None:
+    """Route flaim: sign in to Flaim, pick the league if none is selected, then offer to leave the demo league."""
+    from fbm.config import LEAGUE_CONFIG_PATH
+
+    if not _fbm("flaim", "login"):
+        console.print("[red]`fbm flaim login` failed; fix it (see docs/flaim.md) and run it again.[/]")
+        return
+    if not LEAGUE_CONFIG_PATH.exists() and not _fbm("league", "select"):
+        console.print("[red]`fbm league select` failed; run it again once Flaim lists your league.[/]")
+        return
+    if wiz.current_values().get("league", {}).get("source") == "yahoo":
+        return
+    if not typer.confirm("Switch FBM from the demo league to your Yahoo league now?", default=True):
+        console.print("When ready: `fbm setup --league-source yahoo --yes`, then `fbm snapshot` and `fbm ids`.")
+        return
+    wiz.write_settings(wiz.SetupOptions(league_source="yahoo"))
+    for args in (["settings"], ["snapshot"], ["ids"]):
+        _fbm(*args)
 
 
 def _yahoo_interactive() -> None:
@@ -125,21 +192,23 @@ def _yahoo_interactive() -> None:
 
 
 def _hashtag_interactive(opts: wiz.SetupOptions, current: dict) -> None:
-    """Real (Yahoo) league only: Hashtag Basketball Premium is required. Ask, write [hashtag], then offer sign-in."""
+    """Real (Yahoo) league only: Hashtag Basketball Premium is an optional paid upgrade over the free ESPN engine.
+    Ask, write [hashtag], then offer sign-in."""
     from fbm.config import LEAGUE_CONFIG_PATH
 
     ht = current.get("hashtag", {})
     if opts.hashtag is None:
         console.print(
-            "\n[bold]Hashtag Basketball Premium[/] is required for your real league: it supplies FBM's projections "
-            "and weekly totals (https://hashtagbasketball.com/premium/, Patreon). Your Yahoo league must be imported "
-            "in Hashtag's Premium area. FBM makes no suggestions until Hashtag is connected and healthy."
+            "\nFBM runs your league on its [bold]free ESPN engine[/]. Optional paid upgrade: [bold]Hashtag Basketball "
+            "Premium[/] (https://hashtagbasketball.com/premium/, Patreon) as the data layer, with your Yahoo league "
+            "imported in Hashtag's Premium area. With it on, FBM pauses suggestions whenever Hashtag can't be read."
         )
         opts.hashtag = typer.confirm(
-            "Do you have Hashtag Premium with this league imported?", default=bool(ht.get("enabled", True))
+            "Use Hashtag Premium (you have it, with this league imported)?", default=bool(ht.get("enabled", False))
         )
     if not opts.hashtag:
-        console.print("[yellow]Hashtag not enabled: FBM can't make suggestions for your real league yet.[/]")
+        wiz.write_settings(wiz.SetupOptions(hashtag=False))
+        console.print(f"[green]{wiz.FREE_ENGINE}[/]: fully supported. Add Hashtag later with `fbm setup --hashtag`.")
         return
     if opts.hashtag_league_id is None:
         default = str(ht.get("league_id") or wiz.default_hashtag_league_id(LEAGUE_CONFIG_PATH))
@@ -176,7 +245,9 @@ def _print_report(report: wiz.SetupReport) -> None:
         f"Agent [bold]{agent.get('name', 'generic')}[/] · models GM={agent.get('gm_model') or 'default'} "
         f"reviewer={agent.get('reviewer_model') or 'default'} routine={agent.get('routine_model') or 'default'} · "
         f"time zone {s.get('owner', {}).get('timezone', 'UTC')} · league {s.get('league', {}).get('source', 'demo')}"
-        f" · hashtag {'on' if s.get('hashtag', {}).get('enabled') else 'off'}"
+        f" · yahoo route {s.get('yahoo', {}).get('route') or 'auto'}"
+        f" · data {'Hashtag Premium' if s.get('hashtag', {}).get('enabled') else 'free ESPN engine'}"
+        f" · alerts {', '.join(wiz.effective_channels(s.get('notify', {}))) or 'none'}"
         f" · automation {auto.get('mode', 'none')} {', '.join(auto.get('jobs', []))}"
     )
     console.print("\n[bold]Next steps[/]")
@@ -198,10 +269,21 @@ def setup_cmd(
     quiet_hours: str = typer.Option(None, help='Local quiet hours, e.g. "23:00-07:00" ("" = none).'),
     expiry_hours: float = typer.Option(None, help="Hours before an unapproved proposal expires."),
     yahoo_approved: bool = typer.Option(False, help="Yahoo API access is approved (show/run the connect steps)."),
+    yahoo_route: str = typer.Option(
+        None,
+        help="How FBM reads Yahoo: flaim (recommended, free hosted read-only connector) | session (your Yahoo "
+        "sign-in, `fbm yahoo login`) | api (your approved Yahoo app, `fbm auth`) | auto (session if saved, else api).",
+    ),
+    telegram: bool = typer.Option(
+        None,
+        "--telegram/--no-telegram",
+        help="Telegram alerts (adds/removes telegram in the notify channels; then run `fbm notify setup`).",
+    ),
     hashtag: bool = typer.Option(
         None,
         "--hashtag/--no-hashtag",
-        help="Hashtag Basketball Premium data layer (required for a real Yahoo league; not for the demo).",
+        help="Optional paid upgrade: Hashtag Basketball Premium as the data layer (real Yahoo league only). "
+        "Off = FBM's free ESPN engine (fully supported).",
     ),
     hashtag_league_id: str = typer.Option(None, help="Hashtag league id (default: your Yahoo league id)."),
     skip_data: bool = typer.Option(False, help="Skip the NBA data backfill/sync."),
@@ -229,6 +311,8 @@ def setup_cmd(
         yahoo_approved=yahoo_approved,
         hashtag=hashtag,
         hashtag_league_id=hashtag_league_id,
+        yahoo_route=yahoo_route.strip().lower() if yahoo_route else None,
+        telegram=telegram,
     )
     interactive = not yes and sys.stdin.isatty()
     current = wiz.current_values()
@@ -254,16 +338,23 @@ def setup_cmd(
         console.print(f"[{_COLORS[r.status]}]{r.status:>7}[/] {r.step}: {r.detail}")
 
     report = wiz.run_setup(opts, on_step=show)
-    if interactive and report.settings.get("league", {}).get("source") != "yahoo":
-        if opts.yahoo_approved:
-            _yahoo_interactive()
-            report = wiz.check()
-        elif opts.yahoo_web_session:
-            subprocess.run(wiz.fbm_command("yahoo", "login"), check=False)
-            report = wiz.check()
+    # flaim_login / yahoo_web_session are set only by _ask_connect (on the demo, or a connected league moving to a new
+    # route); yahoo_approved can also come from --yahoo-approved, so a connected league only runs it to move to api.
+    on_yahoo = report.settings.get("league", {}).get("source") == "yahoo"
+    if interactive and opts.flaim_login:
+        _flaim_interactive()
+        report = wiz.check()
+    elif interactive and opts.yahoo_approved and (not on_yahoo or opts.yahoo_route == "api"):
+        _yahoo_interactive()
+        report = wiz.check()
+    elif interactive and opts.yahoo_web_session:
+        _fbm("yahoo", "login")
+        report = wiz.check()
     if interactive and report.settings.get("league", {}).get("source") == "yahoo" and opts.hashtag is not False:
         _hashtag_interactive(opts, wiz.current_values())
         report = wiz.check()
+    if interactive and opts.notify_setup and not _fbm("notify", "setup"):
+        console.print("[red]`fbm notify setup` failed; fix it and run it again (see docs/telegram.md).[/]")
     console.print()
     _print_report(report)
     raise typer.Exit(1 if report.failed else 0)

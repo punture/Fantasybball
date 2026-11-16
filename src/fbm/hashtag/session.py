@@ -2,7 +2,8 @@
 
 `fbm hashtag login` opens a browser window on HT's sign-in page; the owner signs in themselves (FBM never sees the
 password). Once HT serves a signed-in premium page, FBM keeps only the cookies a browser would send to
-hashtagbasketball.com, in the OS credential store (`credentials.HASHTAG_WEB_SESSION`, never on disk, never printed).
+hashtagbasketball.com, in the OS credential store (`credentials.HASHTAG_WEB_SESSION`; data/secrets/ on a machine
+without one; never printed).
 `fbm hashtag login --paste` accepts a copied `Cookie:` request header instead.
 """
 

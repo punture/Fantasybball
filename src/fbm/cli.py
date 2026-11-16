@@ -161,7 +161,7 @@ def auth(
         store_token_response(payload)
 
     _run(_exchange)
-    console.print("[green]Yahoo authorized.[/] Refresh token stored in your OS credential store.\n")
+    console.print(f"[green]Yahoo authorized.[/] Refresh token stored in {credentials.describe()}.\n")
     _run(_select_league, league_key)
 
 
@@ -250,6 +250,8 @@ def status() -> None:
     ):
         console.print(f"{label}: {'[green]set[/]' if credentials.get(key) else '[yellow]missing[/]'}")
     from fbm.flaim.route import LABELS, yahoo_route
+
+    console.print(f"Secret store: {credentials.describe()}")
     from fbm.yahoo import session as web_session
 
     try:
@@ -285,16 +287,27 @@ def settings(
         with league_client() as client:
             raw = yahoo_settings.fetch_settings(client, cfg.league_key)
         summary = yahoo_settings.summarize(raw)
-        console.print(yahoo_settings.to_markdown(summary))
+        markdown = yahoo_settings.to_markdown(summary) + _category_warning(summary)
+        console.print(markdown)
         if save:
             RAW_DIR.mkdir(parents=True, exist_ok=True)
             (RAW_DIR / "league_settings.json").write_text(json.dumps(raw, indent=2), encoding="utf-8")
             (RAW_DIR / "league_settings_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
             MEMORY_DIR.mkdir(parents=True, exist_ok=True)
-            (MEMORY_DIR / "league-settings.md").write_text(yahoo_settings.to_markdown(summary), encoding="utf-8")
+            (MEMORY_DIR / "league-settings.md").write_text(markdown, encoding="utf-8")
             console.print("[green]Saved[/] data/raw/league_settings*.json and memory/league-settings.md")
 
     _run(_settings)
+
+
+def _category_warning(summary: dict) -> str:
+    """A loud Markdown block when the league scores categories FBM can't model ('' when all are modeled)."""
+    from fbm.analytics.categories import category_support
+
+    support = category_support(summary)
+    if support.status == "OK":
+        return ""
+    return f"\n## {support.status}: league categories FBM can't model\n\n> **{support.status}:** {support.message}\n"
 
 
 def _resolve_day(day: str | None, default: date) -> date:

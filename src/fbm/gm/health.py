@@ -315,6 +315,32 @@ def check_storage(data_dir_exists: bool, db_bytes: int | None) -> list[dict[str,
     return [result("Storage", WARN if mb > limit else OK, f"fbm.db {mb:.1f} MB (warn above {limit} MB)")]
 
 
+def check_categories(source: str, summary: dict[str, Any] | None) -> list[dict[str, str]]:
+    """Yahoo league only: are all scoring categories ones FBM can model? FAIL when a scored one is ignored."""
+    from fbm.analytics.categories import SUPPORTED_LABELS, category_support
+
+    if source != "yahoo":
+        return []
+    support = category_support(summary)
+    fix = ""
+    if support.ignored:
+        fix = f"FBM models {SUPPORTED_LABELS} (or a subset). See `fbm settings`."
+    elif support.assumed_nine_cat:
+        fix = "Run `fbm settings` (or `fbm snapshot`) to read your league's categories."
+    return [result("League categories", support.status, support.message, fix)]
+
+
+def read_league_summary(path: Path | None = None) -> dict[str, Any] | None:
+    """The saved Yahoo settings summary (data/raw/league_settings_summary.json); None if missing or unreadable."""
+    from fbm.league.yahoo_league import SETTINGS_SUMMARY_PATH
+
+    try:
+        data = json.loads((path or SETTINGS_SUMMARY_PATH).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 _COUNTING = ("tpm", "pts", "reb", "ast", "stl", "blk", "tov")
 _PLANNER_MIN_BANKED = 0.25  # banked growth (share of the first pull's rest-of-week) needed to judge the planner
 _PLANNER_MIN_DROP = 0.5  # the planner's AFTER - BEFORE must shrink by at least this share of the banked growth
@@ -579,6 +605,7 @@ def gather(
         _web_session_age_days(now),
         _flaim_status(),
     )
+    checks += check_categories(settings.league_source, read_league_summary())
     checks += check_proposals(prop_rows, now)
     lookback = C("health.journal_lookback_days")
     journal = _read_journal(memory.JOURNAL_DIR, local_today - timedelta(days=lookback + 1))

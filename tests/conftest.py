@@ -20,3 +20,15 @@ def _fresh_yahoo_week_cache():
     services._WEEK_MATCHUPS.clear()
     yield
     services._WEEK_MATCHUPS.clear()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_secret_file(monkeypatch, tmp_path):
+    """Without an OS keyring, fbm.credentials falls back to a secrets file: keep it out of the real data/ folder."""
+    from fbm import credentials
+
+    monkeypatch.setenv(credentials.FILE_ENV, str(tmp_path / "secrets" / "credentials.json"))
+    monkeypatch.delenv(credentials.BACKEND_ENV, raising=False)
+    credentials.reset_backend()
+    yield
+    credentials.reset_backend()
