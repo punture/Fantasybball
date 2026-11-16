@@ -1,17 +1,19 @@
-"""Daily lineup optimizer (max games started, then value), solved as a max-weight bipartite assignment."""
+"""Daily lineup optimizer (max expected games started, then value), solved as a max-weight bipartite assignment."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
+from fbm.analytics.simulation import play_probability
+from fbm.constants import C
 from fbm.league.model import IL_SLOTS, RosterPlayer, can_fill
 
-GAME_WEIGHT = 1000.0  # a started game always beats any value difference
+GAME_WEIGHT = 1000.0  # a started game (x the player's play probability) always beats any value difference
 STABILITY_BONUS = 0.01  # prefer leaving players where they are (fewer manual changes)
 INELIGIBLE = -1e9
 
@@ -48,21 +50,31 @@ def optimize_day(
     playing: set[str],
     value: Mapping[str, float],
     locked: Iterable[str] = (),
+    sit: Iterable[str] = (),
 ) -> LineupResult:
     """Assign players to `starting_slots` for one game day.
 
     playing: player_ids whose NBA team has a game that day.
     locked: player_ids whose game has started (their slot cannot change).
-    Players currently in IL/IL+ stay there (IL moves are handled separately).
+    sit: player_ids the caller explicitly benches (e.g. poor shooters while FG%/FT% is contested): they take no
+    starting slot, even an open one. Locked players keep their slot.
+    A game counts at the player's play probability (injury status: GTD/DTD/questionable < 1), so with too few slots a
+    healthy player with a game starts over a game-time decision, and any game still beats no game.
+    Players currently in IL/IL+ stay there (IL moves are handled separately: `il_moves`, `activate_ready`).
     """
     locked_ids = set(locked)
+    sit_ids = set(sit) - locked_ids
     il_players = [p for p in players if p.selected in IL_SLOTS]
     locked_players = [p for p in players if p.player_id in locked_ids and p.selected not in IL_SLOTS]
     open_slots = list(starting_slots)
     for p in locked_players:
         if p.selected in open_slots:
             open_slots.remove(p.selected)
-    candidates = [p for p in players if p.player_id not in locked_ids and p.selected not in IL_SLOTS]
+    candidates = [
+        p
+        for p in players
+        if p.player_id not in locked_ids and p.player_id not in sit_ids and p.selected not in IL_SLOTS
+    ]
 
     def has_game(p: RosterPlayer) -> bool:
         return p.player_id in playing and not p.is_out
@@ -71,7 +83,8 @@ def optimize_day(
     if candidates and open_slots:
         weights = np.full((len(candidates), len(open_slots)), INELIGIBLE)
         for i, p in enumerate(candidates):
-            base = (GAME_WEIGHT if has_game(p) else 0.0) + float(value.get(p.player_id, 0.0))
+            game = GAME_WEIGHT * play_probability(p.status) if has_game(p) else 0.0
+            base = game + float(value.get(p.player_id, 0.0))
             for j, slot in enumerate(open_slots):
                 if can_fill(p.eligible, slot):
                     weights[i, j] = base + (STABILITY_BONUS if p.selected == slot else 0.0)
@@ -79,8 +92,8 @@ def optimize_day(
         for i, j in zip(rows, cols, strict=True):
             if weights[i, j] > INELIGIBLE / 2:
                 assignments[candidates[i].player_id] = open_slots[j]
-    for p in candidates:
-        assignments.setdefault(p.player_id, "BN")
+    for p in players:
+        assignments.setdefault(p.player_id, "BN")  # unassigned candidates and benched (`sit`) players
 
     starting = set(starting_slots)
     starters_with_games = sum(1 for p in players if assignments[p.player_id] in starting and has_game(p))
@@ -89,6 +102,20 @@ def optimize_day(
         p.player_id: (p.selected, assignments[p.player_id]) for p in players if p.selected != assignments[p.player_id]
     }
     return LineupResult(assignments, starters_with_games, benched, changes)
+
+
+def expected_out_today(p: RosterPlayer, playing: set[str] | None = None) -> bool:
+    """Is `p` not expected to play today? Ruled out (O/INJ/OFS/...), a status whose play probability is at most
+    `lineup.il_stash_max_play_prob` (doubtful), or any injury status (GTD/DTD/questionable) with no game today.
+    `playing`: player_ids with a game today (None = unknown: a game-time decision is then assumed to play)."""
+    if p.is_out:
+        return True
+    prob = play_probability(p.status)
+    if prob >= 1.0:
+        return False
+    if prob <= float(C("lineup.il_stash_max_play_prob")):
+        return True
+    return playing is not None and p.player_id not in playing
 
 
 @dataclass(frozen=True)
@@ -106,12 +133,18 @@ def il_moves(
     il_slot_counts: Mapping[str, int],
     capacity: int | None = None,
     locked: Iterable[str] = (),
+    playing: set[str] | None = None,
 ) -> list[IlMove]:
-    """IL compliance moves.
+    """IL compliance moves for one ET day.
 
-    1. Stash: injured active players that are IL/IL+-eligible go into open IL slots (frees active spots).
-    2. Activate: IL players no longer IL-eligible move to the bench if an active spot is open; otherwise the move is
-       `blocked` (Yahoo blocks all roster moves while an ineligible player sits in IL, so a drop must be proposed).
+    1. Stash: active IL/IL+-eligible players not expected to play today (`expected_out_today`: ruled out, doubtful,
+       or a game-time decision with no game) go into open IL slots (frees active spots). A game-time decision with a
+       game today stays active: Yahoo's IL+ accepts him, but stashing him would cost the game.
+    2. Activate: IL players no longer IL-eligible, then IL players whose status improved enough to play today and who
+       have a game (`playing`: player_ids with a game today), move to the bench if an active spot is open. Otherwise
+       an ineligible player's move is `blocked` (a drop must be proposed; while he sits in IL, Yahoo blocks every
+       roster move until it is resolved); a still-eligible player simply stays on IL (no move: nothing is blocked,
+       and the week plan's `waiting` reports the spot he needs).
     Players whose games have started (`locked`) are left alone.
     """
     locked_ids = set(locked)
@@ -121,10 +154,17 @@ def il_moves(
     injured = [
         p
         for p in players
-        if p.selected not in IL_SLOTS and p.player_id not in locked_ids and any(s in p.eligible for s in il_slot_counts)
+        if p.selected not in IL_SLOTS
+        and p.player_id not in locked_ids
+        and any(s in p.eligible for s in il_slot_counts)
+        and expected_out_today(p, playing)
     ]
-    to_activate = [
-        p for p in players if p.selected in IL_SLOTS and p.selected not in p.eligible and p.player_id not in locked_ids
+    in_il = [p for p in players if p.selected in IL_SLOTS and p.player_id not in locked_ids]
+    must = [p for p in in_il if p.selected not in p.eligible]
+    improved = [
+        p
+        for p in in_il
+        if p not in must and playing is not None and p.player_id in playing and not expected_out_today(p, playing)
     ]
 
     def stash(p: RosterPlayer, slot: str) -> None:
@@ -133,50 +173,89 @@ def il_moves(
         injured.remove(p)
         active -= 1
 
+    def stash_into_open_slots() -> None:
+        for p in list(injured):
+            for slot in ("IL", "IL+"):
+                if slot in p.eligible and used.get(slot, 0) < il_slot_counts.get(slot, 0):
+                    stash(p, slot)
+                    used[slot] = used.get(slot, 0) + 1
+                    break
+
     # 1. Stash injured players into currently open IL slots.
-    for p in list(injured):
-        for slot in ("IL", "IL+"):
-            if slot in p.eligible and used.get(slot, 0) < il_slot_counts.get(slot, 0):
-                stash(p, slot)
-                used[slot] = used.get(slot, 0) + 1
-                break
-    # 2. Activate healthy IL players: swap with an injured player for the same slot, else use an open active spot.
-    for p in to_activate:
+    stash_into_open_slots()
+    # 2. Activate: swap with an injured player for the same slot, else use an open active spot.
+    for p in [*must, *improved]:
+        why = "healthy: activate from IL" if p in must else f"{p.status or 'healthy'} with a game today: activate"
         swap = next((q for q in injured if p.selected in q.eligible), None)
         if swap is not None:
             stash(swap, p.selected)
-            moves.append(IlMove(p.player_id, p.name, p.selected, "BN", "healthy: activate from IL"))
+            moves.append(IlMove(p.player_id, p.name, p.selected, "BN", why))
             active += 1
         elif capacity is None or active < capacity:
-            moves.append(IlMove(p.player_id, p.name, p.selected, "BN", "healthy: activate from IL"))
+            moves.append(IlMove(p.player_id, p.name, p.selected, "BN", why))
             used[p.selected] -= 1
             active += 1
-        else:
-            moves.append(
-                IlMove(
-                    p.player_id,
-                    p.name,
-                    p.selected,
-                    p.selected,
-                    "healthy but the roster is full: drop someone to activate (proposal needed)",
-                    True,
-                )
-            )
+        elif p in must:
+            reason = "healthy but the roster is full: drop someone to activate (proposal needed)"
+            moves.append(IlMove(p.player_id, p.name, p.selected, p.selected, reason, True))
+        # else: still IL-eligible, so nothing is blocked: he stays on IL (week plans report the spot he needs)
     # 3. Stash remaining injured players into slots freed by activations.
-    for p in list(injured):
-        for slot in ("IL", "IL+"):
-            if slot in p.eligible and used.get(slot, 0) < il_slot_counts.get(slot, 0):
-                stash(p, slot)
-                used[slot] = used.get(slot, 0) + 1
-                break
+    stash_into_open_slots()
     return moves
 
 
+def activate_ready(
+    players: Sequence[RosterPlayer], capacity: int, value: Mapping[str, float] | None = None
+) -> tuple[list[RosterPlayer], tuple[str, ...], tuple[str, ...]]:
+    """Week planning: IL/IL+ players able to play (not `expected_out_today`: healthy, a game-time decision, or back
+    from their ESPN return date via `as_of`; Out, out-for-season and doubtful players stay) move to the bench, best
+    value first, while an active roster spot is open (Yahoo needs one to activate a player) or an active player not
+    expected to play who is eligible for the freed IL slot can take it (a swap). `capacity` = active (non-IL) spots.
+
+    Returns (roster, activated ids, waiting ids): waiting players are ready to play but have no spot (a drop is
+    needed). The input players are not mutated."""
+    value = value or {}
+    out = list(players)
+    index = {p.player_id: i for i, p in enumerate(out)}
+    active = sum(1 for p in out if p.selected not in IL_SLOTS)
+    ready = sorted(
+        (p for p in out if p.selected in IL_SLOTS and not expected_out_today(p)),
+        key=lambda p: -float(value.get(p.player_id, 0.0)),
+    )
+    activated: list[str] = []
+    waiting: list[str] = []
+    for r in ready:
+        if active < capacity:
+            active += 1
+        else:
+            swap = next(
+                (q for q in out if q.selected not in IL_SLOTS and expected_out_today(q) and r.selected in q.eligible),
+                None,
+            )
+            if swap is None:
+                waiting.append(r.player_id)
+                continue
+            out[index[swap.player_id]] = replace(swap, selected=r.selected)
+        out[index[r.player_id]] = replace(r, selected="BN")
+        activated.append(r.player_id)
+    return out, tuple(activated), tuple(waiting)
+
+
+def _tip_time(raw: object) -> datetime | None:
+    """Scheduled tip time (UTC) from the schedule's start_utc; None when unreadable."""
+    try:
+        start = datetime.fromisoformat(str(raw))
+    except ValueError:
+        return None
+    return start if start.tzinfo is not None else start.replace(tzinfo=UTC)
+
+
 def started_teams(games: Iterable[Mapping[str, object]], now: datetime) -> set[str]:
-    """NBA teams whose game on this ET day has started (by state or scheduled tip time) — their players are locked."""
+    """NBA teams whose game on this ET day has started (by state or scheduled tip time) — their players are locked,
+    and a player added now can't play that game. An unreadable tip time falls back to the game state."""
     out: set[str] = set()
     for g in games:
-        start = datetime.fromisoformat(str(g["start_utc"]))
-        if g["state"] in ("in", "post") or start <= now:
+        start = _tip_time(g["start_utc"])
+        if g["state"] in ("in", "post") or (start is not None and start <= now):
             out.update((str(g["home"]), str(g["away"])))
     return out

@@ -193,7 +193,9 @@ def _team_week(
     value: Mapping[str, float],
     return_dates: Mapping[str, date] | None = None,
 ) -> dict[str, Any]:
-    _, plans = plan_team_week(team, days, playing, league.starting_slots(), value, return_dates)
+    _, plans = plan_team_week(
+        team, days, playing, league.starting_slots(), value, return_dates, capacity=league.roster_size()
+    )
     games = {p.player_id: sum(1 for d in days if p.nba_team in playing.get(d, set())) for p in team.players}
     players = [
         {

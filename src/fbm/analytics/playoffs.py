@@ -1,18 +1,23 @@
 """Fantasy playoff schedule: which NBA teams play the most games in the fantasy playoff weeks.
 
-Fantasy weeks run Monday-Sunday (ET). Week 1 is the week of the first regular-season game; the playoffs are the
-league's playoff weeks from Yahoo settings when available, otherwise the last `playoffs.weeks` weeks.
+Fantasy weeks run Monday-Sunday (ET) from the week of the first regular-season game, except Yahoo's merged matchup
+periods (NBA Cup, All-Star break: `playoffs.merged_weeks`), and Yahoo's real bounds for a known week (the league
+snapshot's current week) anchor the numbering. The playoffs are the league's playoff weeks from Yahoo settings when
+available, otherwise `playoffs.weeks` weeks from `playoffs.default_start_week` (Yahoo's default).
 """
 
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
 from fbm.constants import C
+
+Period = tuple[date, date]
+Anchor = tuple[int, date, date]  # (week number, start, end) of a week whose real Yahoo bounds are known
 
 
 @dataclass(frozen=True)
@@ -22,20 +27,73 @@ class FantasyWeek:
     end: date
 
 
-def fantasy_weeks(conn: sqlite3.Connection, season: int) -> list[FantasyWeek]:
+def merged_periods(spec: str | None = None) -> list[Period]:
+    """Yahoo matchup periods longer than a week from 'YYYY-MM-DD..YYYY-MM-DD' ranges, comma-separated (default: the
+    `playoffs.merged_weeks` constant). Malformed or reversed ranges are ignored."""
+    text = str(C("playoffs.merged_weeks")) if spec is None else spec
+    out: list[Period] = []
+    for part in text.split(","):
+        lo, sep, hi = part.strip().partition("..")
+        try:
+            period = (date.fromisoformat(lo.strip()), date.fromisoformat(hi.strip()))
+        except ValueError:
+            continue
+        if sep and period[0] <= period[1]:
+            out.append(period)
+    return sorted(out)
+
+
+def _calendar(start: date, last: date, merged: Sequence[Period], number: int) -> list[FantasyWeek]:
+    """Weeks from `start` through the week containing `last`: Monday-Sunday, except that a week touching a merged
+    period runs to the period's end."""
+    weeks: list[FantasyWeek] = []
+    while start <= last:
+        end = start + timedelta(days=6)
+        extended = True
+        while extended:
+            extended = False
+            for lo, hi in merged:
+                if lo <= end < hi:
+                    end, extended = hi, True
+        weeks.append(FantasyWeek(number, start, end))
+        start, number = end + timedelta(days=1), number + 1
+    return weeks
+
+
+def build_weeks(
+    first_game: date, last_game: date, merged: Sequence[Period] = (), anchor: Anchor | None = None
+) -> list[FantasyWeek]:
+    """Fantasy weeks covering the regular season (pure). Week 1 starts the Monday of opening week. `anchor` = a week
+    whose real bounds are known: it keeps them and its number, later weeks follow from its end, earlier weeks are
+    renumbered back from it (weeks numbered below 1 are dropped)."""
+    weeks = _calendar(first_game - timedelta(days=first_game.weekday()), last_game, merged, 1)
+    if anchor is None:
+        return weeks
+    number, start, end = anchor
+    if end < start:
+        return weeks
+    before = [w for w in weeks if w.end < start]
+    first = number - len(before)
+    renumbered = [FantasyWeek(first + i, w.start, w.end) for i, w in enumerate(before)]
+    after = _calendar(end + timedelta(days=1), last_game, merged, number + 1)
+    return [w for w in renumbered if w.number >= 1] + [FantasyWeek(number, start, end), *after]
+
+
+def fantasy_weeks(
+    conn: sqlite3.Connection,
+    season: int,
+    merged: Sequence[Period] | None = None,
+    anchor: Anchor | None = None,
+) -> list[FantasyWeek]:
+    """The season's fantasy weeks from the stored NBA schedule (`build_weeks`); `merged` defaults to the
+    `playoffs.merged_weeks` constant."""
     row = conn.execute(
         "SELECT MIN(et_date), MAX(et_date) FROM games WHERE season = ? AND season_type = 2", (season,)
     ).fetchone()
     if not row or not row[0]:
         return []
     first, last = date.fromisoformat(row[0]), date.fromisoformat(row[1])
-    start = first - timedelta(days=first.weekday())
-    weeks, n = [], 1
-    while start <= last:
-        weeks.append(FantasyWeek(n, start, start + timedelta(days=6)))
-        start += timedelta(days=7)
-        n += 1
-    return weeks
+    return build_weeks(first, last, merged_periods() if merged is None else merged, anchor)
 
 
 def playoff_weeks(weeks: list[FantasyWeek], settings: Mapping[str, Any] | None = None) -> list[FantasyWeek]:
@@ -48,6 +106,10 @@ def playoff_weeks(weeks: list[FantasyWeek], settings: Mapping[str, Any] | None =
         if chosen:
             return chosen
     n = int(C("playoffs.weeks"))
+    lo = int(C("playoffs.default_start_week"))
+    default = [w for w in weeks if lo <= w.number < lo + n]
+    if len(default) == n:
+        return default
     return weeks[-n:] if weeks else []
 
 
@@ -83,9 +145,10 @@ class PlayoffSchedule:
 
 
 def playoff_schedule(
-    conn: sqlite3.Connection, season: int, settings: Mapping[str, Any] | None = None
+    conn: sqlite3.Connection, season: int, settings: Mapping[str, Any] | None = None, anchor: Anchor | None = None
 ) -> PlayoffSchedule:
-    weeks = playoff_weeks(fantasy_weeks(conn, season), settings)
+    """`anchor`: a week whose real Yahoo bounds are known (the league snapshot's week), see `build_weeks`."""
+    weeks = playoff_weeks(fantasy_weeks(conn, season, anchor=anchor), settings)
     return PlayoffSchedule(weeks, team_games_by_week(conn, weeks))
 
 

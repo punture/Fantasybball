@@ -12,6 +12,13 @@ situation keys used here (engine must log them):
     weekday: 0..6                    ET weekday of the decision (0 = Monday)
     adds_left: int | None            adds left this week
     expected_days_out: float | None  il decisions: the injured player's expected days out
+    objective: "p_win" | None        "p_win" in one-win-per-week (Most Categories) leagues: when every acting
+                                     option carries `p_win_delta`, options are valued by it and category-unit
+                                     thresholds (ros penalty, stream_min_gain) are converted by `p_win_per_cat`;
+                                     otherwise the decision stays in category units
+    p_win_per_cat: float             P(win the week) per expected category (with objective "p_win")
+    cat_weights: {cat: float}        explicit category weights the engine searched with (Most Categories lineups:
+                                     how much each category decides the week); used instead of week_weights
 
 Option dict keys used here:
     id, label                        required (fbm.gm.decisions validates)
@@ -23,6 +30,7 @@ Option dict keys used here:
                                      league, weighted 1 except punts; category_weights: expected categories by
                                      category)
     ros_cost: float                  ROS G value given up (drops); default 0
+    p_win_delta: float               change in P(win the week) vs standing pat (objective "p_win" only)
     adds: int                        adds the option uses; default 0
     stand_pat: bool                  the do-nothing option (streams, claims, trades, drops)
     action: "hold"|"drop"|...        il options
@@ -89,10 +97,39 @@ def classify(odds: Mapping[str, float], params: Mapping[str, Any], punts: Iterab
     return out
 
 
-def option_value(option: Mapping[str, Any], weights: Mapping[str, float], params: Mapping[str, Any]) -> float:
+def _p_win_rate(situation: Mapping[str, Any] | None) -> float | None:
+    """P(win the week) per expected category when the decision's objective is P(win), else None."""
+    situation = situation or {}
+    if situation.get("objective") != "p_win":
+        return None
+    return float(situation.get("p_win_per_cat") or 1.0)
+
+
+def _p_win_options(options: list[dict[str, Any]], situation: Mapping[str, Any]) -> bool:
+    """Value this decision in P(win) units? Only when its objective is P(win) and every option that does something
+    carries `p_win_delta`: options in category units (trades, claims, IL, older logs) keep category units for both
+    the comparison and the stream_min_gain threshold, so the two units are never mixed."""
+    if _p_win_rate(situation) is None:
+        return False
+    acting = [o for o in options if not o.get("stand_pat")]
+    return bool(acting) and all(o.get("p_win_delta") is not None for o in acting)
+
+
+def option_value(
+    option: Mapping[str, Any],
+    weights: Mapping[str, float],
+    params: Mapping[str, Any],
+    situation: Mapping[str, Any] | None = None,
+) -> float:
+    """Weighted category score minus the ROS penalty; with objective "p_win" an option's `p_win_delta` (penalty
+    converted to P(win) units)."""
+    rate = _p_win_rate(situation)
+    penalty = float(params["policy.ros_penalty"]) * float(option.get("ros_cost") or 0.0)
+    if rate is not None and option.get("p_win_delta") is not None:
+        return float(option["p_win_delta"]) - rate * penalty
     scores = option.get("cat_scores") or {}
     value = sum(float(weights.get(cat, 1.0)) * float(v) for cat, v in scores.items())
-    return value - float(params["policy.ros_penalty"]) * float(option.get("ros_cost") or 0.0)
+    return value - penalty
 
 
 def eligible(decision: Mapping[str, Any], params: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -125,6 +162,8 @@ def choose(decision: Mapping[str, Any], params: Mapping[str, Any]) -> str:
     kind = decision["kind"]
     if kind in SEASON_KINDS:
         weights = {cat: 0.0 for cat in situation.get("punts") or ()}
+    elif situation.get("cat_weights"):
+        weights = {str(cat): float(w) for cat, w in situation["cat_weights"].items()}
     else:
         weights = week_weights(situation.get("odds") or {}, params, situation.get("punts") or ())
 
@@ -137,11 +176,20 @@ def choose(decision: Mapping[str, Any], params: Mapping[str, Any]) -> str:
     if kind in ACQUIRE_KINDS:
         options = [o for o in options if o.get("stand_pat") or _within_add_reserve(o, situation, params)]
 
-    best = max(options, key=lambda o: option_value(o, weights, params))  # first wins ties (logged order)
+    p_win = _p_win_options(options, situation)
+
+    def value(o: Mapping[str, Any]) -> float:
+        if not p_win:
+            return option_value(o, weights, params)
+        if o.get("p_win_delta") is None:  # a stand-pat option logged without it changes nothing
+            o = {**o, "p_win_delta": 0.0}
+        return option_value(o, weights, params, situation)
+
+    best = max(options, key=value)  # first wins ties (logged order)
     if kind in (*ACQUIRE_KINDS, "trade", "drop"):
         stand = next((o for o in options if o.get("stand_pat")), None)
         if stand is not None and best is not stand:
-            gain = option_value(best, weights, params) - option_value(stand, weights, params)
-            if gain < float(params["policy.stream_min_gain"]):
+            min_gain = float(params["policy.stream_min_gain"]) * ((_p_win_rate(situation) or 1.0) if p_win else 1.0)
+            if value(best) - value(stand) < min_gain:
                 return str(stand["id"])
     return str(best["id"])

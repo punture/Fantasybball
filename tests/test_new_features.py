@@ -117,15 +117,20 @@ def test_playoff_weeks_and_team_games(conn):
     weeks = fantasy_weeks(conn, 2027)
     assert weeks[0] == FantasyWeek(1, date(2026, 10, 19), date(2026, 10, 25))
     assert weeks[-1].start == date(2027, 4, 5)
+    # Without Yahoo settings: Yahoo's 2026-27 default playoff weeks 20-22 (merged NBA Cup and All-Star weeks).
     po = playoff_weeks(weeks)
-    assert [w.start for w in po] == [date(2027, 3, 22), date(2027, 3, 29), date(2027, 4, 5)]
+    assert [(w.number, w.start, w.end) for w in po] == [
+        (20, date(2027, 3, 15), date(2027, 3, 21)),
+        (21, date(2027, 3, 22), date(2027, 3, 28)),
+        (22, date(2027, 3, 29), date(2027, 4, 4)),
+    ]
     custom = playoff_weeks(
         weeks, {"end_week": weeks[-1].number, "settings": {"playoff_start_week": weeks[-2].number, "uses_playoff": "1"}}
     )
     assert len(custom) == 2
     sched = playoff_schedule(conn, 2027)
-    assert sched.team_games["NY"] == [2, 1, 2] and sched.games("BOS") == 3 and sched.games("XXX") == 0
-    assert sched.average_total == pytest.approx((5 + 3 + 2) / 3)
+    assert sched.team_games["NY"] == [0, 2, 1] and sched.games("BOS") == 2 and sched.games("XXX") == 0
+    assert sched.average_total == pytest.approx((3 + 2 + 1) / 3)
 
 
 def test_playoff_value_and_progress():

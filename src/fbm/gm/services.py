@@ -166,6 +166,44 @@ def _is_yahoo() -> bool:
     return load_settings().league_source == "yahoo"
 
 
+# ---- league rules for week decisions: lineup deadline, games already tipped, scoring objective
+
+
+def _headone() -> bool:
+    """One win per week (Yahoo "H2H Most Categories"): decisions maximize P(win the matchup), not expected cats."""
+    return ((_league_summary() or {}).get("settings") or {}).get("scoring_type") == "headone"
+
+
+def _deadline() -> str:
+    """When lineup changes and adds take effect: "today" (Daily - Today) or "tomorrow" (Daily - Tomorrow)."""
+    from fbm.analytics.week import lineup_deadline
+
+    return lineup_deadline(_league_summary(), str(C("lineup.deadline")))
+
+
+def _first_change_day(today: date | None = None) -> date:
+    """First ET day a lineup change, add or drop made now takes effect."""
+    from fbm.analytics.week import first_change_day
+
+    return first_change_day(today or nba_today(), _deadline())
+
+
+def _tipped_now(day: date) -> set[str]:
+    """NBA teams whose game on ET `day` has started as of now (ESPN schedule state / start time): a player added now
+    can't play it, and lineup slots of their players are locked."""
+    from fbm.analytics.lineup import started_teams
+
+    rows = _conn().execute("SELECT * FROM games WHERE et_date = ? AND season_type = 2", (day.isoformat(),)).fetchall()
+    return started_teams(rows, datetime.now(UTC))
+
+
+def _objective_situation() -> dict[str, Any]:
+    """Decision-log situation keys that switch the chooser to P(win the week) in Most Categories leagues."""
+    if not _headone():
+        return {}
+    return {"objective": "p_win", "p_win_per_cat": float(C("stream.p_win_per_cat"))}
+
+
 def _live_week(league: LeagueState, ws: date) -> tuple[dict[str, dict[str, float]], dict[date, set[str]]]:
     """Stats each team has banked this week (Yahoo scoreboard) and, per ET day, the NBA teams whose games were
     already under way when the snapshot was read (their stats are banked, so don't simulate those games again)."""
@@ -686,23 +724,27 @@ def _lineup_plan(
     """Lock-aware lineup for an ET day, with IL compliance moves applied first (when allowed).
 
     Options: one week-weighted lineup per HT view (HT mode; one in engine mode), the ROS-value lineup and a pct-risk
-    variant; `choosers.choose` picks the recommendation (log=True also writes the decision log)."""
+    variant; `choosers.choose` picks the recommendation (log=True also writes the decision log).
+
+    League rules: in a Daily - Tomorrow league a day before the first changeable day is locked as set; IL stashes and
+    activations follow injury status and today's games (`il_moves`); Most Categories leagues weight categories by how
+    much each decides the week (`pivotal_weights`), in the search and in the chooser alike."""
     from dataclasses import replace
 
-    from fbm.analytics.lineup import started_teams
     from fbm.analytics.lineup_swing import swing_categories, swing_values
     from fbm.gm import choosers
 
     c, conn = ctx(), _conn()
     team = league.my_team
     nba = teams_playing(conn, target, target)[target]
-    started = started_teams(
-        conn.execute("SELECT * FROM games WHERE et_date = ? AND season_type = 2", (target.isoformat(),)).fetchall(),
-        datetime.now(UTC),
-    )
-    locked = {p.player_id for p in team.players if p.nba_team in started}
+    started = _tipped_now(target)
+    changeable = _first_change_day()
+    game_started = {p.player_id for p in team.players if p.nba_team in started}
+    # Daily - Tomorrow: a day before the first changeable day is locked as set
+    locked = {p.player_id for p in team.players} if target < changeable else game_started
     il_counts = {s.position: s.count for s in league.slots if s.position in IL_SLOTS}
-    moves = il_moves(team.players, il_counts, league.roster_size(), locked)
+    with_game = {p.player_id for p in team.players if p.nba_team in nba}
+    moves = il_moves(team.players, il_counts, league.roster_size(), locked, with_game)
     applied = [m for m in moves if not m.blocked] if apply_il else []
     moved = {m.player_id: m.to_slot for m in applied}
     players = [replace(p, selected=moved[p.player_id]) if p.player_id in moved else p for p in team.players]
@@ -711,12 +753,25 @@ def _lineup_plan(
     ros = _value(c, punts).to_dict()
     params = _policy.all_values(conn)
     opp = _default_opponent(league)
+    # This week's odds (banked stats + the rest of the week, HT's in HT mode) for today and, in a Daily - Tomorrow
+    # league, for the first changeable day of this week (today's lineup stands as set); a later day is simulated
+    # from that day.
+    current = target == nba_today() or (target == changeable and target <= _week_window()[2])
+    start = None if current else target
     try:
-        start = None if target == nba_today() else target
         odds, odds_source = _week_odds(league, opp, int(C("lineup.swing_sims")), start)
     except Exception:  # noqa: BLE001 - no odds: every category weighs the same (ROS-style lineup)
         odds, odds_source = {}, "unavailable"
     weights = choosers.week_weights(odds, params, punts) if odds else {}
+    objective: dict[str, Any] = _objective_situation()
+    if objective and odds:
+        try:
+            pivotal = _pivotal_weights(league, opp, start, punts)
+        except Exception:  # noqa: BLE001 - fall back to the contested-category weights
+            pivotal = {}
+        if any(w > 0 for w in pivotal.values()):  # a week already decided has no pivotal category: keep contested
+            weights = pivotal
+            objective["cat_weights"] = {k: round(w, 4) for k, w in weights.items()}
     floor = float(params["policy.weight_floor"])
     starting = set(league.starting_slots())
     active_view = str(params["policy.view.lineup"]) if c.hashtag else None
@@ -732,8 +787,10 @@ def _lineup_plan(
     options: list[dict[str, Any]] = []
     results: dict[str, Any] = {}
 
-    def add(oid: str, label: str, values: dict[str, float], g: pd.DataFrame, **extra: Any) -> None:
-        res = optimize_day(players, league.starting_slots(), playing, values, locked)
+    def add(
+        oid: str, label: str, values: dict[str, float], g: pd.DataFrame, sit: set[str] | None = None, **extra: Any
+    ) -> None:
+        res = optimize_day(players, league.starting_slots(), playing, values, locked, sit or ())
         starters = sorted(pid for pid, slot in res.assignments.items() if slot in starting and pid in playing)
         options.append(
             {
@@ -757,33 +814,33 @@ def _lineup_plan(
     else:
         add("weighted", "week-weighted lineup (contested categories count more)", weighted(active_g), active_g)
     add("ros", "rest-of-season value lineup", ros, active_g)
-    max_impact = float(params["policy.pct_risk.max_impact"])
+    max_impact = float(params["policy.pct_risk.max_impact"])  # <= 0: G impact below which a shooter sits
     risky = {
         pid
         for pid in playing
         if pid in active_g.index
         and any(
-            weights.get(k, 0.0) >= 0.5 and float(active_g.at[pid, f"g_{k}"]) < -max_impact
+            weights.get(k, 0.0) >= 0.5 and float(active_g.at[pid, f"g_{k}"]) < max_impact
             for k in ("fg_pct", "ft_pct")
             if f"g_{k}" in active_g.columns
         )
     }
-    base = weighted(active_g)
     add(
         "pct_risk",
         "week-weighted lineup, sitting poor shooters while FG%/FT% is contested",
-        {pid: (v - 100.0 if pid in risky else v) for pid, v in base.items()},
+        weighted(active_g),
         active_g,
+        sit=risky,  # benched outright, even with an open slot (the policy decides when this option is eligible)
         requires={"policy.pct_risk.enabled": True},
         **({"view": active_view} if active_view else {}),
     )
-    sit = _decision_situation(league, opp, odds, active_view, target, odds_source=odds_source)
+    situation = _decision_situation(league, opp, odds, active_view, target, odds_source=odds_source, **objective)
     rec_id, decision_id = _ht.decide(
         conn,
         kind="lineup",
         trigger=trigger,
         et_date=target,
-        situation=sit,
+        situation=situation,
         options=options,
         week=league.week,
         log=log,
@@ -799,6 +856,7 @@ def _lineup_plan(
         "moves": moves,
         "applied": applied,
         "locked": locked,
+        "game_started": game_started,
         "players": players,
         "swing_weights": weights,
         "swing_categories": swing_categories(weights, floor),
@@ -806,7 +864,65 @@ def _lineup_plan(
         "recommended_option": rec_id,
         "decision_id": decision_id,
         "odds_source": odds_source,
+        "deadline": _deadline(),
+        "first_change_day": changeable,
+        "lineup_locked": target < changeable,
+        "waiting_returns": _waiting_returns(league, target, ros),
+        "objective": "p_win_week" if objective else "expected_cats",
     }
+
+
+def _pivotal_weights(
+    league: LeagueState, opp: FantasyTeam, start: date | None, punts: tuple[str, ...]
+) -> dict[str, float]:
+    """Most Categories: how much each category decides this week's matchup (week.pivotal_weights over the
+    simulated rest of the week)."""
+    from fbm.analytics.week import pivotal_weights
+
+    totals: dict[str, Any] = {}
+    _matchup(league, league.my_team, opp, start, int(C("lineup.swing_sims")), totals=totals)
+    return pivotal_weights(totals["me"], totals["opp"], league.categories, punts)
+
+
+def _waiting_returns(league: LeagueState, day: date, value: dict[str, float]) -> dict[str, date]:
+    """My IL players able to play from some day this week with no active roster spot for them (a drop is needed),
+    from the planned rest of the week. Never raises (context only)."""
+    from fbm.analytics.week import waiting_returns
+
+    try:
+        _start, ws, we = _week_window(day)
+        if day > we:
+            return {}
+        days = date_range(max(day, ws), we)
+        playing = teams_playing(_conn(), days[0], we)
+        _, plans = plan_team_week(
+            league.my_team,
+            days,
+            playing,
+            league.starting_slots(),
+            value,
+            ctx().return_dates(_conn()),
+            capacity=league.roster_size(),
+            locked_days=_locked_days(days[0]),
+        )
+        return waiting_returns(plans)
+    except Exception:  # noqa: BLE001 - a heads-up only
+        return {}
+
+
+def _locked_days(day0: date) -> set[date]:
+    """Planning days whose lineup is already set (Daily - Tomorrow leagues: today)."""
+    today = nba_today()
+    return {today} if day0 <= today < _first_change_day(today) else set()
+
+
+def _waiting_lines(league: LeagueState, waiting: dict[str, date]) -> list[str]:
+    names = {p.player_id: p.name for p in league.my_team.players}
+    return [
+        f"{names.get(pid, pid)}: can return from IL on {d.isoformat()} but the roster is full: drop someone to "
+        "activate him (proposal needed)"
+        for pid, d in sorted(waiting.items(), key=lambda kv: kv[1])
+    ]
 
 
 def _week_odds(
@@ -845,7 +961,9 @@ def _ht_injury_adjustment(
         active = [replace(p, status="", selected="BN" if p.selected in IL_SLOTS else p.selected) for p in team.players]
         healthy = replace(team, players=active)
         _, as_ht = plan_team_week(healthy, days, playing, slots, value)
-        _, real = plan_team_week(team, days, playing, slots, value, back)
+        _, real = plan_team_week(
+            team, days, playing, slots, value, back, capacity=league.roster_size(), locked_days=_locked_days(day0)
+        )
         out[side] = ht_odds.injury_adjustment(
             ht_odds.expected_line(_remaining_games(healthy, as_ht, skip), models, available=False),
             ht_odds.expected_line(_remaining_games(team, real, skip), models, available=True),
@@ -974,16 +1092,16 @@ def _decision_situation(
         ht_as_of=ctx().ht_as_of,
         team_key=league.my_team_key,
         starting_slots=list(league.starting_slots()),
-        **extra,
+        **{**_objective_situation(), **extra},
     )
 
 
 @_ht.gated
 def optimize_lineup(day: str | None = None, trigger: str | None = None) -> dict[str, Any]:
-    """Recommended lineup for an ET day. `trigger` (daily-gm | lineup-guard | owner-ask) is logged with the
-    decision."""
+    """Recommended lineup for an ET day (default: the first day a change made now applies — today, or tomorrow in a
+    Daily - Tomorrow league). `trigger` (daily-gm | lineup-guard | owner-ask) is logged with the decision."""
     league = active_league()
-    target = parse_date(day) if day else nba_today()
+    target = parse_date(day) if day else _first_change_day()
     plan = _lineup_plan(league, target, apply_il=True, trigger=trigger, log=True)
     res, team = plan["res"], league.my_team
     names = {p.player_id: p.name for p in team.players}
@@ -999,7 +1117,7 @@ def optimize_lineup(day: str | None = None, trigger: str | None = None) -> dict[
             f"{names[pid]}: {original[pid]} -> {slot}" for pid, slot in res.assignments.items() if original[pid] != slot
         ],
         "benched_with_games": [names[pid] for pid in res.benched_with_games],
-        "locked_game_started": sorted(names[pid] for pid in plan["locked"]),
+        "locked_game_started": sorted(names[pid] for pid in plan["game_started"]),
         "il_moves": [m.__dict__ for m in plan["moves"]],
         "il_moves_blocked": [m.name for m in plan["moves"] if m.blocked],
         "swing_categories": [_CAT_LABEL.get(k, k) for k in plan["swing_categories"]],
@@ -1008,7 +1126,27 @@ def optimize_lineup(day: str | None = None, trigger: str | None = None) -> dict[
             f"{names[t['player_id']]}: {t['ros_lineup']} (ROS value) -> {t['swing_lineup']} (swing cats)"
             for t in plan["tiebreak_changes"]
         ],
+        **_lineup_rules(plan, league),
     }
+
+
+def _lineup_rules(plan: dict[str, Any], league: LeagueState) -> dict[str, Any]:
+    """Lineup fields shared by optimize_lineup and lineup_steps: the league's deadline and the week-ahead IL
+    returns that need a roster spot."""
+    blocked = {m.player_id for m in plan["moves"] if m.blocked}  # already reported as IL moves needing a drop
+    waiting = {pid: d for pid, d in plan["waiting_returns"].items() if pid not in blocked}
+    out: dict[str, Any] = {
+        "lineup_deadline": plan["deadline"],
+        "first_changeable_et": plan["first_change_day"].isoformat(),
+        "objective": plan["objective"],
+        "il_returns_needing_a_spot": _waiting_lines(league, waiting),
+    }
+    if plan["lineup_locked"]:
+        out["lineup_locked_note"] = (
+            f"Daily - Tomorrow league: this day's lineup is already locked; changes made now apply from "
+            f"{plan['first_change_day'].isoformat()}."
+        )
+    return out
 
 
 def _matchup(
@@ -1019,9 +1157,12 @@ def _matchup(
     n: int,
     view: str | None = None,
     totals: dict | None = None,
+    not_playing: dict[date, set[str]] | None = None,
 ):
     """Simulate the rest of the week (HT mode: per-game means from HT view `view`, default the lineup view).
-    Pass a dict as `totals` to receive the simulated week totals arrays ("me", "opp")."""
+    Pass a dict as `totals` to receive the simulated week totals arrays ("me", "opp"). IL players are activated once
+    they can play and a roster spot is open; a Daily - Tomorrow league's lineups for today stand as set.
+    `not_playing`: ET day -> my player_ids whose game that day doesn't count (e.g. an add whose game tipped)."""
     from fbm.analytics.simulation import TeamWeek, compare, simulate_totals
 
     c = ctx()
@@ -1031,8 +1172,11 @@ def _matchup(
     value = _value(c, _strategy_punts(None)).to_dict()
     models = c.models([*me.player_ids(), *opp.player_ids()], _conn(), view=view)
     back = c.return_dates(_conn())
-    _, my_plans = plan_team_week(me, days, playing, league.starting_slots(), value, back)
-    _, opp_plans = plan_team_week(opp, days, playing, league.starting_slots(), value, back)
+    rules = {"capacity": league.roster_size(), "locked_days": _locked_days(day0)}
+    _, my_plans = plan_team_week(
+        me, days, playing, league.starting_slots(), value, back, not_playing=not_playing, **rules
+    )
+    _, opp_plans = plan_team_week(opp, days, playing, league.starting_slots(), value, back, **rules)
     banked, skip = _live_week(league, ws) if start_day is None else ({}, {})
     my_games = _remaining_games(me, my_plans, skip)
     opp_games = _remaining_games(opp, opp_plans, skip)
@@ -1452,6 +1596,9 @@ def _opponent_streaming(
         banked=banked.get(opp.team_key, {}),
         skip=skip,
         return_dates=c.return_dates(conn),
+        # the same league rules as my own streams: Daily - Tomorrow adds start tomorrow, tipped games don't count
+        first_change_day=max(_first_change_day(), days[0]),
+        tipped={days[0]: _tipped_now(days[0])} if days[0] == nba_today() else {},
     )
     plan = plan_streams(sctx, fa, droppable, adds)
     n_cats = len(league.categories)
@@ -1565,7 +1712,7 @@ def punt_scenarios(scenarios: str | None = None, fa_moves: int | None = None, to
         my_team_key=mine,
         active=active,
         free_agents=sorted(fa_pool),
-        team_totals=sim.team_totals,
+        team_totals=lambda ids: sim.team_totals(ids, sim.il[mine]),  # my IL players count as in sim.totals
         others_totals=others,
         fa_moves=moves,
         min_gain=float(C("punt.min_swap_gain")),
@@ -1750,29 +1897,47 @@ def evaluate_add_drop(
     before, *_ = _matchup(league, league.my_team, opp, None, n)
     from copy import deepcopy
 
+    from fbm.analytics.week import p_win_week
+
+    # League rules: the move takes effect from the first changeable day (Daily - Tomorrow: tomorrow, the dropped
+    # player still plays today); an add gets no credit for a game that already tipped.
+    start, ws, we = _week_window()
+    today = nba_today()
+    eff = max(_first_change_day(today), start)
+    add_team = str(c.projections.loc[add_id, "team"])
+    tipped = eff == today and add_team in _tipped_now(today)
+    not_playing: dict[date, set[str]] = {}
+    for d in date_range(start, we):
+        if d < eff or (tipped and d == today):
+            not_playing.setdefault(d, set()).add(add_id)
+        if drop_id and eff > start and d >= eff:
+            not_playing.setdefault(d, set()).add(drop_id)
     swapped = deepcopy(league.my_team)
-    if drop_id:
+    if drop_id and eff <= start:
         swapped.players = [p for p in swapped.players if p.player_id != drop_id]
     swapped.players.append(steps.roster_player_from_values(add_id, c.values, _eligibility()))
-    after, *_ = _matchup(league, swapped, opp, None, n)
-    start, ws, we = _week_window()
+    after, *_ = _matchup(league, swapped, opp, None, n, not_playing=not_playing)
     out = {
         "add": str(c.projections.loc[add_id, "name"]),
         "add_id": add_id,
         "drop": str(c.projections.loc[drop_id, "name"]) if drop_id else None,
         "drop_id": drop_id,
+        "effective_et": eff.isoformat(),
+        "lineup_deadline": _deadline(),
         "ros_value_delta": _r(value.get(add_id, 0.0) - (value.get(drop_id, 0.0) if drop_id else 0.0)),
         "ros_g_delta_by_cat": ros,
         "punts_applied": list(pun),
         "games_left_this_week": {
-            "add": _games_remaining(str(c.projections.loc[add_id, "team"]), start, we),
-            "drop": _games_remaining(str(c.projections.loc[drop_id, "team"]), start, we) if drop_id else 0,
+            "add": _games_remaining(add_team, eff, we) - (1 if tipped else 0),
+            "drop": _games_remaining(str(c.projections.loc[drop_id, "team"]), eff, we) if drop_id else 0,
         },
         "this_week_vs": opp.name,
         "expected_cats_before": _r(before.expected_score),
         "expected_cats_after": _r(after.expected_score),
         "p_win_majority_before": _r(before.p_majority),
         "p_win_majority_after": _r(after.p_majority),
+        "p_win_week_before": _r(p_win_week(before)),
+        "p_win_week_after": _r(p_win_week(after)),
         "cat_p_win_change": {
             b.category.label: _r(a.p_win - b.p_win) for b, a in zip(before.categories, after.categories, strict=True)
         },
@@ -1783,10 +1948,11 @@ def evaluate_add_drop(
         {
             "id": "add_drop",
             "label": f"add {out['add']}" + (f", drop {out['drop']}" if drop_id else ""),
-            "spec": {"moves": [{"add": add_id, "drop": drop_id, "date": nba_today().isoformat()}]},
+            "spec": {"moves": [{"add": add_id, "drop": drop_id, "date": eff.isoformat()}]},
             "cat_scores": _keyed(out["cat_p_win_change"]),
             "adds": 1,
             "ros_cost": max(0.0, -float(out["ros_value_delta"])),
+            "p_win_delta": round(p_win_week(after) - p_win_week(before), 4),
         },
         "policy.view.ros",
         opp,
@@ -1854,14 +2020,17 @@ def lineup_steps(day: str | None = None, confirm: bool = False, trigger: str | N
         if blocked is not None:
             return blocked
     league = active_league()
-    target = parse_date(day) if day else nba_today()
+    target = parse_date(day) if day else _first_change_day()
     plan = _lineup_plan(league, target, apply_il=True, trigger=trigger, log=not confirm)
     assignments = plan["res"].assignments
     out = steps.lineup_steps(league, assignments, target)
     blocked = [f"{m.name}: {m.reason}" for m in plan["moves"] if m.blocked]
+    rules = _lineup_rules(plan, league)
     names = {p.player_id: p.name for p in league.my_team.players}
     lines = "\n".join(f"- {x}" for x in out["changes"]) or "- no changes"
-    extra = "".join(f"\n- NEEDS A ROSTER MOVE (proposal): {b}" for b in blocked)
+    extra = "".join(f"\n- NEEDS A ROSTER MOVE (proposal): {b}" for b in [*blocked, *rules["il_returns_needing_a_spot"]])
+    if "lineup_locked_note" in rules:
+        extra += f"\n- {rules['lineup_locked_note']}"
     if confirm:
         simulated = steps.simulate_lineup_in_demo(league, assignments)
         note = "demo roster updated to match" if simulated else "verified on the next Yahoo snapshot"
@@ -1879,9 +2048,10 @@ def lineup_steps(day: str | None = None, confirm: bool = False, trigger: str | N
         **out,
         "il_moves_recommended": [f"{m.name}: {m.from_slot} -> {m.to_slot}" for m in plan["applied"]],
         "il_moves_needing_a_roster_move": blocked,
-        "locked_game_started": sorted(names[pid] for pid in plan["locked"]),
+        "locked_game_started": sorted(names[pid] for pid in plan["game_started"]),
         "recommended_option": plan.get("recommended_option"),
         "decision_id": plan.get("decision_id"),
+        **rules,
         "note": "FBM never changes your league: set this lineup in Yahoo yourself.",
     }
 
@@ -2309,13 +2479,18 @@ def streaming_plan(
     protect: str = "",
     candidates: int = 25,
     n: int = 2000,
-    min_gain: float = 0.05,
+    min_gain: float | None = None,
     include_waivers: bool = True,
     trigger: str | None = None,
 ) -> dict[str, Any]:
+    """Greedy streaming plan for the rest of the week. Objective by league scoring: weighted expected categories
+    (contested-category weights, the same the chooser applies) or, in Most Categories leagues, P(win the matchup).
+    `min_gain` is in the objective's units (default: stream.min_gain, converted to P(win) by stream.p_win_per_cat)."""
     from fbm.analytics.bank import DrawBank
-    from fbm.analytics.streaming import StreamContext, plan_streams
-    from fbm.gm.waiver_status import clear_dates, games_from
+    from fbm.analytics.streaming import OBJECTIVE_CATS, OBJECTIVE_P_WIN, StreamContext, evaluate, plan_streams
+    from fbm.analytics.week import p_win_week
+    from fbm.gm import choosers
+    from fbm.gm.waiver_status import clear_dates
 
     league, c, conn = active_league(), ctx(), _conn()
     me, opp = league.my_team, _team(league, opponent)
@@ -2326,9 +2501,13 @@ def streaming_plan(
     playing = teams_playing(conn, ws, we)
     elig = _eligibility()
     clears = clear_dates(league.on_waivers, c.values.index)  # players on waivers: addable only from this ET day
+    first = max(_first_change_day(), day0)  # Daily - Tomorrow leagues: moves made now start tomorrow
+    tipped = {day0: _tipped_now(day0)} if day0 == nba_today() else {}  # an add can't play a game that tipped
+    headone = _headone()
 
     def games(pid: str) -> int:
-        return games_from(str(c.values.at[pid, "team"]), days, playing, clears.get(pid))
+        team, start = str(c.values.at[pid, "team"]), max(first, clears.get(pid, first))
+        return sum(1 for d in days if d >= start and team in playing.get(d, set()) - tipped.get(d, set()))
 
     wire = _available_ids(league, c)
     if not include_waivers:
@@ -2351,7 +2530,16 @@ def streaming_plan(
     models = c.models([*me.player_ids(), *opp.player_ids(), *fa], conn)
     bank = DrawBank(models, n_sims=n, seed=23)
     back = c.return_dates(conn)
-    _, opp_plans = plan_team_week(opp, days, playing, league.starting_slots(), c.value_map(), back)
+    _, opp_plans = plan_team_week(
+        opp,
+        days,
+        playing,
+        league.starting_slots(),
+        c.value_map(),
+        back,
+        capacity=league.roster_size(),
+        locked_days=_locked_days(day0),
+    )
     banked, skip = _live_week(league, ws)
     opp_totals = bank.total(_remaining_games(opp, opp_plans, skip), banked.get(opp.team_key, {}))
 
@@ -2362,6 +2550,10 @@ def streaming_plan(
     used = adds_used_this_week()
     adds_available = adds if adds is not None else max(0, limit - used)
 
+    try:
+        odds_now, _src = _week_odds(league, opp, 1500)
+    except Exception:  # noqa: BLE001 - fall back to the planner's own baseline below
+        odds_now = {}
     sctx = StreamContext(
         base=list(me.players),
         pool=pool,
@@ -2378,7 +2570,15 @@ def streaming_plan(
         skip=skip,
         add_not_before={pid: clears[pid] for pid in fa if pid in clears},
         return_dates=back,
+        objective=OBJECTIVE_P_WIN if headone else OBJECTIVE_CATS,
+        first_change_day=first,
+        tipped=tipped,
+        punts=frozenset(pun),
     )
+    if not odds_now:
+        odds_now = _ht.odds_map(evaluate(sctx, [])[0])
+    if not headone:  # search with the contested-category weights the chooser applies to the same odds
+        sctx.weights = choosers.week_weights(odds_now, _policy.all_values(conn), pun)
     plan = plan_streams(sctx, fa, droppable, adds_available, min_gain=min_gain)
     name = {pid: p.name for pid, p in pool.items()}
     stream_view = str(_policy.get(conn, "policy.view.stream")) if c.hashtag else None
@@ -2389,6 +2589,7 @@ def streaming_plan(
             "label": "no moves",
             "spec": {"moves": []},
             "cat_scores": {k.key: 0.0 for k in league.categories},
+            "p_win_delta": 0.0,
             "stand_pat": True,
             "adds": 0,
             "ros_cost": 0.0,
@@ -2414,16 +2615,14 @@ def streaming_plan(
                 # per-category change in P(win) vs standing pat; prefixes scale the full plan's change by their
                 # share of its expected-category gain (the planner reports per-move gains only)
                 "cat_scores": {k: round(v * share(i), 4) for k, v in _ht.odds_delta(plan.final, plan.baseline).items()},
+                # exact change in P(win the week) of this prefix (the planner's per-move gains, same random numbers)
+                "p_win_delta": round(sum(float(m.p_win_gain) for m in moves), 4),
                 "stand_pat": False,
                 "adds": i,
                 "ros_cost": round(float(sum(max(0.0, float(m.ros_cost)) for m in moves)), 4),
             }
         )
     options = [o for o in options if o["stand_pat"] or o["adds"]]
-    try:
-        odds_now, _src = _week_odds(league, opp, 1500)
-    except Exception:  # noqa: BLE001 - situation context only
-        odds_now = _ht.odds_map(plan.baseline)
     rec_id, decision_id = _ht.decide(
         conn,
         kind="stream_plan",
@@ -2440,6 +2639,7 @@ def streaming_plan(
         return {
             "expected_cats": _r(o.expected_score),
             "p_win_majority": _r(o.p_majority),
+            "p_win_week": _r(p_win_week(o)),
             "p_win_by_cat": {x.category.label: _r(x.p_win) for x in o.categories},
         }
 
@@ -2457,10 +2657,22 @@ def streaming_plan(
             out["waiver_verdict"] = {"error": f"{type(err).__name__}: {err}"}
         return out
 
+    deadline = _deadline()
+    objective_note = (
+        "Most Categories league (one win per week): moves maximize P(win the matchup); thresholds in categories are "
+        f"converted at {float(C('stream.p_win_per_cat')):g} P(win) per category."
+        if headone
+        else "Moves maximize expected categories won, weighted toward contested categories (category_weights; the "
+        "chooser uses the same weights); gain_expected_cats is the unweighted change over non-punted categories."
+    )
     return {
         "opponent": opp.name,
         "window_et": f"{days[0]}..{days[-1]}",
+        "objective": "p_win_week" if headone else "expected_cats",
+        "lineup_deadline": deadline,
+        "first_change_et": first.isoformat(),
         "punts_applied": list(pun),
+        "category_weights": {_CAT_LABEL.get(k, k): round(float(w), 3) for k, w in sctx.weights.items()},
         "weekly_add_limit": limit,
         "adds_used_this_week": used,
         "adds_available": adds_available,
@@ -2478,7 +2690,9 @@ def streaming_plan(
                 "add_id": m.move.add,
                 "drop": name.get(m.move.drop) if m.move.drop else None,
                 "drop_id": m.move.drop,
-                "gain_expected_cats": _r(m.gain, 3),
+                "gain_expected_cats": _r(m.expected_cats_gain, 3),
+                "gain_p_win_week": _r(m.p_win_gain, 3),
+                "gain_objective": _r(m.gain, 3),
                 "add_games": m.add_games,
                 "drop_games_lost": m.drop_games_lost,
                 "ros_value_cost": _r(m.ros_cost),
@@ -2486,14 +2700,23 @@ def streaming_plan(
             }
             for m in recommended_moves
         ],
+        "il_returns_needing_a_spot": _waiting_lines(league, plan.waiting_returns),
         "recommended_option": rec_id,
         "decision_id": decision_id,
         "candidate_source": "hashtag waiver wire" if c.hashtag else "FBM free-agent ranking",
         "planner_moves_considered": len(plan.moves),
         "notes": [
             "Greedy plan: each move is the best single add/drop given the earlier moves (common random numbers).",
-            "Effective day = first ET day the added player is on the roster. League settings expose no add-lock "
-            "rule, so a free agent is addable today; players on waivers are only scheduled from the day they clear.",
+            objective_note,
+            "Effective day = first ET day the added player is on the roster. "
+            + (
+                f"Daily - Tomorrow league: moves made now take effect from {first} and today's lineup stands as set."
+                if deadline == "tomorrow"
+                else "Daily - Today league: a free agent added now plays today unless his game already tipped."
+            )
+            + " Players on waivers are only scheduled from the day they clear.",
+            "IL players who can play (healthy, or from their ESPN return date) are activated once an active roster "
+            "spot is open; il_returns_needing_a_spot lists those left without one (a drop is needed).",
             "via_waivers moves cannot be made earlier than waivers_clear_et: place a claim (spends rolling priority; "
             "see waiver_verdict) or add him as a free agent once he clears. Another team may claim him first.",
             f"Waiver status is as of the Yahoo snapshot ({league.fetched_at or 'demo league: none'}).",
@@ -3223,13 +3446,29 @@ def signal_grades_tool() -> dict[str, Any]:
 # ------------------------------------------------------------------ playoffs
 
 
+def _week_anchor() -> tuple[int, date, date] | None:
+    """The Yahoo snapshot's current week and its real bounds (numbers later fantasy weeks); None when unknown."""
+    if not _is_yahoo():
+        return None
+    try:
+        league = active_league()
+    except GMError:
+        return None
+    # A week rolled past Yahoo's finished one may come from the Monday-Sunday calendar fallback (fbm.league.weeks),
+    # which ignores merged weeks: only Yahoo's own reported week anchors the numbering.
+    if league.week_start and league.week_end and not league.rolled_from_week:
+        return league.week, league.week_start, league.week_end
+    return None
+
+
 def _playoff_schedule():
     from fbm.analytics.playoffs import playoff_schedule
 
     c = ctx()
-    key = f"playoffs|{c.season}|{_CTX_CACHE.get('key')}"
+    anchor = _week_anchor()
+    key = f"playoffs|{c.season}|{_CTX_CACHE.get('key')}|{anchor}"
     if _CTX_CACHE.get("playoff_key") != key:
-        _CTX_CACHE["playoff"] = playoff_schedule(_conn(), c.season, _league_summary())
+        _CTX_CACHE["playoff"] = playoff_schedule(_conn(), c.season, _league_summary(), anchor)
         _CTX_CACHE["playoff_key"] = key
     return _CTX_CACHE["playoff"]
 

@@ -11,6 +11,8 @@ Run as the `gm` agent but keep it short and cheap. No proposals, no market scan.
 2. `optimize_lineup(day, trigger="lineup-guard")` for today's ET game day (`nba_game_day_et` from `league_overview`). Players whose games have
    started are locked (`locked_game_started`); IL moves are included. Ties are broken by this week's
    swing categories. `HT_UNHEALTHY` → no lineup suggestion: email the fix once (kind `alert`), not every hour.
+   If it carries `lineup_locked_note` (a Daily – Tomorrow league: today's lineup is already locked), check
+   `first_changeable_et` instead (omit `day`: that's the default).
 3. If the optimal lineup or IL moves differ from the current roster, or a rostered player's injury status changed:
    `lineup_steps(day, trigger="lineup-guard")` for that day. It returns the recommended lineup and exact steps; FBM never changes the league, so
    send them to the owner with the tip-off time in local time (the next `snapshot` shows whether they were done).
