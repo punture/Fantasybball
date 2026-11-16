@@ -77,8 +77,7 @@ def evaluate_il_activation(
     opp = svc._team(league, opponent)
     playing = teams_playing(conn, ws, we)
     models = c.models([*me.player_ids(), *opp.player_ids()], conn)
-    models[act_id].play_prob = float(prob)
-    models[act_id].return_date = None  # `prob` and the roster phases already encode his return
+    models[act_id].set_availability(prob, available_from)  # first game from his return/effective day at `prob`
     bank = DrawBank(models, n_sims=n, seed=42)
     banked, skip = svc._live_week(league, ws)
 

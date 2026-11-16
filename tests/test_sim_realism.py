@@ -63,7 +63,9 @@ def test_form_shock_widens_weekly_totals_and_keeps_percentages():
     wide = simulate_totals(week, {"a": shocked}, 5000, np.random.default_rng(1))
     assert base[:, COL["pts"]].std() == 0.0
     assert wide[:, COL["pts"]].std() == pytest.approx(80 * 0.2, rel=0.1)  # one factor shared by all 4 games
-    assert np.allclose(wide[:, COL["fgm"]] / wide[:, COL["fga"]], 0.5)
+    fgm, fga = wide[:, COL["fgm"]], wide[:, COL["fga"]]
+    assert (np.abs(fgm / fga - 0.5) <= 1.0 / fga).all()  # whole makes/attempts: within one make of 50%
+    assert fgm.sum() / fga.sum() == pytest.approx(0.5, abs=0.002)
 
 
 def test_back_to_back_rest_only_on_b2b_dates():

@@ -15,6 +15,7 @@ from fbm.analytics.simulation import PlayerModel, build_player_models
 from fbm.analytics.valuation import PoolStats, ValuationConfig, value_players
 from fbm.data.espn import current_season
 from fbm.store.db import NO_NBA_TEAM
+from fbm.timeutil import nba_today
 
 ESPN_STATUS_TO_YAHOO = {"OUT": "O", "DAY-TO-DAY": "DTD", "SUSPENSION": "SUSP"}
 
@@ -36,6 +37,7 @@ class AnalyticsContext:
     week_view: str = "STREAM7"  # HT view behind this-week sims (lineups, matchups, streams) unless one is passed
     ht_as_of: str | None = None  # date of the HT ROS projections in `projections`
     _rest_cache: tuple[dict[str, float], dict[str, frozenset]] | None = None
+    _schedule_cache: dict[str, tuple[date, ...]] | None = None
     _views: dict[str, pd.DataFrame] = field(default_factory=dict)
 
     @property
@@ -108,11 +110,15 @@ class AnalyticsContext:
         conn: sqlite3.Connection | None = None,
         horizon: str = "week",
         view: str | None = None,
+        as_of: date | None = None,
     ) -> dict[str, PlayerModel]:
         """Pass `conn` when calling from a different thread than the one that built this context.
 
-        horizon="week": play probability from today's injury status (this week's matchups, daily lineups); an Out
-        player with an ESPN return date plays from it at the GTD probability.
+        horizon="week" (this week's matchups, daily lineups): availability from the current injury statuses as a
+        return-day process from ET day `as_of` (default today): the status sets the chance of playing the team's next
+        game; a player who sits stays out until he returns (sim.recovery.*), counted on his team's schedule. An Out
+        player with an ESPN return date plays from it like a game-time decision; one without misses a geometric
+        number of games (availability.out_default_games).
         horizon="season": play probability = rest-of-season availability share (season-level sims).
         """
         c = conn or self.conn
@@ -140,7 +146,23 @@ class AnalyticsContext:
             b2b_dates=b2b,
             return_dates=self.return_dates(c),
             anchor=anchor,
+            as_of=as_of or nba_today(),
+            schedules=self._schedules(c, ids),
         )
+
+    def _schedules(self, conn: sqlite3.Connection, ids: list[str]) -> dict[str, tuple[date, ...]]:
+        """Each player's NBA team game days this season (the team schedule is read once per context)."""
+        if self._schedule_cache is None:
+            by_team: dict[str, set[date]] = {}
+            for et_date, home, away in conn.execute(
+                "SELECT et_date, home, away FROM games WHERE season_type = 2 AND season = ?", (self.season,)
+            ):
+                day = date.fromisoformat(str(et_date)[:10])
+                for team in (home, away):
+                    by_team.setdefault(str(team), set()).add(day)
+            self._schedule_cache = {team: tuple(sorted(days)) for team, days in by_team.items()}
+        teams = self.projections["team"].astype(str) if "team" in self.projections else pd.Series(dtype=str)
+        return {pid: self._schedule_cache.get(str(teams.get(pid, "")), ()) for pid in ids}
 
     def _rest_inputs(self, conn: sqlite3.Connection, ids: list[str]) -> tuple[dict[str, float], dict[str, frozenset]]:
         """Back-to-back rest risk per player and his team's back-to-back dates (computed once per context)."""
