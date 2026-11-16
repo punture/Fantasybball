@@ -34,6 +34,14 @@ jobs = []
 expiry_hours = 18
 
 [notify]
+# Where alerts and digests go, in order (`fbm notify setup`; docs/telegram.md): "telegram" (your own Telegram bot,
+# direct), "openclaw" (through your OpenClaw assistant; with "telegram" too it falls back to direct Telegram) and
+# "email" (Gmail). Not set = ["email"] when email_enabled is true, else none.
+# channels = ["telegram"]
+# Your numeric Telegram chat id. The bot token lives in the OS credential store, never here.
+telegram_chat_id = ""
+# OpenClaw CLI (name on PATH or full path), used when "openclaw" is a channel.
+openclaw_bin = "openclaw"
 # Optional Gmail notifications (`fbm notify setup`). Reports also live in reports/ and your agent session.
 email_enabled = false
 # Empty = send to the Gmail sender address.

@@ -17,6 +17,7 @@ YAHOO_WEB_SESSION = "yahoo_web_session"
 HASHTAG_WEB_SESSION = "hashtag_web_session"  # Hashtag Basketball Premium sign-in cookies (put_large/get_large)
 GMAIL_ADDRESS = "gmail_address"
 GMAIL_APP_PASSWORD = "gmail_app_password"
+TELEGRAM_BOT_TOKEN = "telegram_bot_token"  # @BotFather token for direct Telegram alerts (`fbm notify setup`)
 
 # Windows Credential Manager caps one secret at 1280 characters; larger values are split across numbered entries.
 CHUNK_CHARS = 1000

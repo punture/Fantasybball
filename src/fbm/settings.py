@@ -15,6 +15,7 @@ EXAMPLE_PATH = CONFIG_DIR / "settings.example.toml"
 AGENTS = ("copilot", "claude-code", "codex", "cursor", "gemini", "generic")
 AUTOMATION_MODES = ("none", "agent-app", "scheduler", "engine-only")
 JOBS = ("data-sync", "lineup-guard", "daily-gm", "weekly-retro", "trade-scan", "health")
+NOTIFY_CHANNELS = ("telegram", "openclaw", "email")  # [notify] channels (see fbm.notify.dispatch)
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,20 @@ class Settings:
     # suggestion tool refuses to suggest while HT is unhealthy (no fallback). Off = demo/ESPN engine.
     hashtag_enabled: bool = False
     hashtag_league_id: str = ""  # HT's league id (= the Yahoo league id, e.g. "30273")
+    # >>> [notify] delivery channels (alerts + digests; docs/telegram.md) >>>
+    notify_channels: tuple[str, ...] = field(default_factory=tuple)  # ordered subset of NOTIFY_CHANNELS
+    telegram_chat_id: str = ""  # numeric chat id; the bot token lives in the credential store
+    openclaw_bin: str = "openclaw"  # OpenClaw CLI (name on PATH or full path)
+    # <<< [notify] delivery channels <<<
+
+
+def _notify_channels(notify: dict) -> tuple[str, ...]:
+    """[notify] channels, known names only, in order, once each. Absent: ("email",) when email_enabled, else ()."""
+    raw = notify.get("channels")
+    if raw is None:
+        return ("email",) if notify.get("email_enabled") else ()
+    names = [str(c).strip().lower() for c in ([raw] if isinstance(raw, str) else raw)]
+    return tuple(dict.fromkeys(c for c in names if c in NOTIFY_CHANNELS))
 
 
 def load_settings(path: Path = SETTINGS_PATH) -> Settings:
@@ -67,6 +82,11 @@ def load_settings(path: Path = SETTINGS_PATH) -> Settings:
         quiet_hours=notify.get("quiet_hours", ""),
         hashtag_enabled=bool(hashtag.get("enabled", default.hashtag_enabled)),
         hashtag_league_id=str(hashtag.get("league_id", default.hashtag_league_id) or ""),
+        # >>> [notify] delivery channels >>>
+        notify_channels=_notify_channels(notify),
+        telegram_chat_id=str(notify.get("telegram_chat_id", "") or "").strip(),
+        openclaw_bin=str(notify.get("openclaw_bin", "") or "").strip() or default.openclaw_bin,
+        # <<< [notify] delivery channels <<<
     )
     if path == SETTINGS_PATH and os.environ.get("FBM_HASHTAG_ENABLED") in ("0", "1"):
         # Process-level override of the owner's file (the test suite forces "0"; also a manual kill switch).

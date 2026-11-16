@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -235,15 +236,34 @@ def check_journal(
     return result("Scheduled runs", status, "; ".join(parts), "Check the PC was awake / scheduled tasks ran.")
 
 
-def check_notifications(email_enabled: bool, outbox: list[dict[str, Any]], now: datetime) -> list[dict[str, str]]:
+def check_notifications(
+    email_enabled: bool,
+    outbox: list[dict[str, Any]],
+    now: datetime,
+    channels: Sequence[str] = (),
+    readiness: Mapping[str, tuple[bool, str]] | None = None,
+) -> list[dict[str, str]]:
+    """Email, each enabled chat channel (readiness = channel -> (ready, detail) from fbm.notify.dispatch.readiness;
+    presence checks only) and recent outbox failures."""
     hours = C("health.outbox_lookback_h")
     failed = [o for o in outbox if o["status"] == "failed" and _age_h(o["created_at"], now) <= hours]
-    return [
-        result(
-            "Email",
-            OK,
-            "enabled" if email_enabled else "disabled (reports live in reports/ + your agent session)",
-        ),
+    ready = readiness or {}
+    email_on = email_enabled or "email" in channels
+    email_ok, email_detail = ready.get("email", (True, "enabled"))
+    if not email_on:
+        rows = [result("Email", OK, "disabled (reports live in reports/ + your agent session)")]
+    elif email_ok:
+        rows = [result("Email", OK, "enabled")]
+    else:
+        rows = [result("Email", WARN, f"enabled but {email_detail}", "Run `fbm notify setup`.")]
+    for channel, label in (("telegram", "Telegram"), ("openclaw", "OpenClaw")):
+        if channel in channels:
+            ok, detail = ready.get(channel, (False, "readiness not checked"))
+            fix = "Run `fbm notify setup` (docs/telegram.md)."
+            if channel == "openclaw" and "telegram" in channels:
+                fix += " Until then alerts fall back to direct Telegram."
+            rows.append(result(label, OK if ok else WARN, detail, "" if ok else fix))
+    rows.append(
         result(
             "Outbox failures",
             WARN if failed else OK,
@@ -251,8 +271,9 @@ def check_notifications(email_enabled: bool, outbox: list[dict[str, Any]], now: 
             if failed
             else f"none in last {hours}h",
             "See `fbm notify outbox`." if failed else "",
-        ),
-    ]
+        )
+    )
+    return rows
 
 
 def check_storage(data_dir_exists: bool, db_bytes: int | None) -> list[dict[str, str]]:
@@ -342,6 +363,15 @@ def _cred_presence() -> dict[str, bool]:
 
     names = (credentials.YAHOO_CLIENT_ID, credentials.YAHOO_CLIENT_SECRET, credentials.YAHOO_REFRESH_TOKEN)
     return {n: credentials.get(n) is not None for n in names}
+
+
+def _notify_readiness(settings: Any) -> dict[str, tuple[bool, str]]:
+    try:
+        from fbm.notify.dispatch import readiness
+
+        return readiness(settings)
+    except Exception as err:  # noqa: BLE001 - health must load; report the channels as unchecked
+        return {ch: (False, f"not checked ({type(err).__name__})") for ch in settings.notify_channels}
 
 
 def _web_session_age_days(now: datetime) -> float | None:
@@ -486,7 +516,9 @@ def gather(
     checks.append(
         check_journal(journal, phase, local_today, game_days, date.fromisoformat(min(regular)) if regular else None)
     )
-    checks += check_notifications(settings.email_enabled, outbox, now)
+    checks += check_notifications(
+        settings.email_enabled, outbox, now, settings.notify_channels, _notify_readiness(settings)
+    )
     checks += check_hashtag(ht_status)
     if ht_status and ht_status.get("enabled"):
         checks.append(check_ht_planner(planner_rows))

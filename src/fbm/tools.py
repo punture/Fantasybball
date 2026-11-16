@@ -17,7 +17,7 @@ from typing import Any
 
 from fbm.gm import memory
 from fbm.gm import services as svc
-from fbm.notify import email as notify
+from fbm.notify import dispatch as notify_dispatch
 
 
 @dataclass(frozen=True)
@@ -851,6 +851,16 @@ def policy_suggestions() -> dict:
 
 
 @tool(write=True)
+def notify(subject: str, markdown_body: str, kind: str = "report") -> dict:
+    """Message the owner on every channel in [notify] channels (Telegram bot, OpenClaw, Gmail; OpenClaw falls back
+    to direct Telegram). kind: report|approval|alert|retro; approval/alert are urgent (bypass quiet hours, arrive
+    with sound); other kinds wait out quiet hours. Markdown subset: **bold**, `code`, - bullets, # headings, tables.
+    Returns status sent | partial | held | disabled (no channel set up) with per-channel deliveries."""
+    return notify_dispatch.send(subject, markdown_body, kind)
+
+
+@tool(write=True)
 def send_email(subject: str, markdown_body: str, kind: str = "report") -> dict:
-    """Email the owner (Gmail). kind: report|approval|alert|retro. approval/alert bypass quiet hours."""
-    return notify.send_email(subject, markdown_body, kind)
+    """Message the owner (same as `notify`: every channel in [notify] channels, despite the name). kind:
+    report|approval|alert|retro. approval/alert bypass quiet hours."""
+    return notify_dispatch.send(subject, markdown_body, kind)
