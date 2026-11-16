@@ -415,6 +415,29 @@ def grade_decisions(
     return out
 
 
+def retro_week(today: date, week_start: date | None = None) -> tuple[date, date, str | None]:
+    """(start, end, note) of the fantasy week a retro covers, NBA Cup / All-Star matchups merged (fantasy_week):
+    the week containing `week_start`, else the last week that has ended by `today` (ET), so a two-week matchup is
+    covered once, whole, after it ends. The note flags a given week still running, or a day in the second half of a
+    two-week matchup (no week has ended since the Monday retro that covered the last completed one)."""
+    from fbm.analytics.week import fantasy_week
+
+    if week_start is not None:
+        start, end = fantasy_week(week_start)
+        note = f"{start}..{end} is still running: its numbers are partial." if end >= today else None
+        return start, end, note
+    current, current_end = fantasy_week(today)
+    start, end = fantasy_week(current - timedelta(days=1))
+    note = None
+    if today - current >= timedelta(days=7):
+        note = (
+            f"{current}..{current_end} is one two-week matchup (NBA Cup / All-Star break) still running: no week has "
+            f"ended since the retro on {current}, which already covered {start}..{end}. The retro on "
+            f"{current_end + timedelta(days=1)} covers the whole matchup."
+        )
+    return start, end, note
+
+
 def weekly_retro_data(
     conn: sqlite3.Connection,
     pool: PoolStats,
@@ -424,8 +447,11 @@ def weekly_retro_data(
     punts: Sequence[str] = (),
     names: Mapping[str, str] | None = None,
     finals: FinalsProvider | None = None,
+    week_end: date | None = None,
 ) -> dict[str, Any]:
-    week_end = week_start + timedelta(days=6)
+    """Retro data for the fantasy week `week_start`..`week_end` (default: 7 days; pass the real end of a merged
+    NBA Cup / All-Star week)."""
+    week_end = week_end or week_start + timedelta(days=6)
     newly_graded = grade_predictions(conn, categories, today, finals=finals)
     lo = datetime.combine(week_start, datetime.min.time(), ET).astimezone(UTC).isoformat(timespec="seconds")
     hi = (
@@ -469,7 +495,7 @@ def weekly_retro_data(
             for r in preds
         ],
         "calibration_season": calibration(conn, exclude_sources=("ht_spread",)),
-        **decision_retro(conn, pool, categories, week_start, today, finals),
+        **decision_retro(conn, pool, categories, week_start, today, finals, week_end),
     }
 
 
@@ -521,13 +547,14 @@ def decision_retro(
     week_start: date,
     today: date,
     finals: FinalsProvider | None = None,
+    week_end: date | None = None,
 ) -> dict[str, Any]:
     """Decision-calibration part of the weekly retro: replay grading, regret by kind, lineup regret, odds
-    reliability (vs Yahoo finals) and the per-view comparison."""
+    reliability (vs Yahoo finals) and the per-view comparison. `week_end` defaults to 7 days after `week_start`."""
     from fbm.gm import decisions as dlog
     from fbm.gm import odds_reliability, replay
 
-    week_end = week_start + timedelta(days=6)
+    week_end = week_end or week_start + timedelta(days=6)
     out: dict[str, Any] = {}
     try:
         replay.grade_pending(conn, today, finals=finals, pool=pool, categories=categories)

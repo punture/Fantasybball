@@ -53,17 +53,20 @@ def _client(session: ws.WebSession, handler) -> YahooClient:
 def test_large_secret_round_trips_in_chunks(vault):
     value = "x" * 3500
     credentials.put_large("big", value)
-    assert vault["big"] == "chunks:4" and all(len(vault[f"big.{i}"]) <= 1280 for i in range(4))
+    head = vault["big"]
+    assert head.startswith("chunks:") and head.endswith(":4")
+    chunks = [k for k in vault if k != "big"]
+    assert len(chunks) == 4 and all(len(vault[k]) <= 1280 for k in chunks)
     assert credentials.get_large("big") == value
     credentials.put_large("big", "short")
-    assert credentials.get_large("big") == "short" and "big.1" not in vault
+    assert credentials.get_large("big") == "short" and len(vault) == 2  # the old generation is gone
     credentials.delete_large("big")
     assert vault == {}
 
 
 def test_large_secret_missing_chunk_reads_as_none(vault):
     credentials.put_large("big", "y" * 2500)
-    del vault["big.1"]
+    del vault[next(k for k in vault if k.endswith(".1"))]
     assert credentials.get_large("big") is None
 
 
@@ -100,7 +103,7 @@ def test_from_browser_cookies_keeps_only_cookies_sent_to_the_api_host():
 def test_session_saved_in_credential_store_survives_the_size_limit(vault):
     big = _session(n=30, value="q" * 120)
     ws.save(big)
-    assert int(vault[credentials.YAHOO_WEB_SESSION].split(":")[1]) > 1
+    assert int(vault[credentials.YAHOO_WEB_SESSION].rsplit(":", 1)[1]) > 1
     loaded = ws.load()
     assert loaded is not None and loaded.cookies == big.cookies and loaded.user_agent == "Mozilla/5.0 Test"
     assert loaded.age_days(datetime(2026, 10, 17, tzinfo=UTC)) == pytest.approx(2.0)

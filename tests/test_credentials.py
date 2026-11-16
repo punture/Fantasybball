@@ -125,6 +125,77 @@ def test_file_store_large_values(use_keyring):
     assert credentials.get_large("big") is None and _file()["secrets"] == {}
 
 
+@pytest.mark.parametrize("store", ["file", "keyring"])
+def test_large_value_read_overlapping_a_save_is_the_old_or_new_value_never_a_mix(use_keyring, monkeypatch, store):
+    """Another process re-saves (e.g. a rotated Flaim token) between this process's chunk reads."""
+    use_keyring(null.Keyring() if store == "file" else MemoryKeyring())
+    old, new = "a" * 2500, "b" * 2500
+    credentials.put_large("big", old)
+    real_get, chunk_reads = credentials.get, []
+
+    def get(name):
+        if name != "big":
+            chunk_reads.append(name)
+            if len(chunk_reads) == 2:  # chunk 0 already read: the other process saves now
+                monkeypatch.setattr(credentials, "get", real_get)
+                credentials.put_large("big", new)
+                monkeypatch.setattr(credentials, "get", get)
+        return real_get(name)
+
+    monkeypatch.setattr(credentials, "get", get)
+    assert credentials.get_large("big") == new
+
+
+@pytest.mark.parametrize("store", ["file", "keyring"])
+def test_a_save_killed_before_its_switch_keeps_the_old_value(use_keyring, monkeypatch, store):
+    """A job killed mid-save (timeout, sleep) must not lose a sign-in the provider has already rotated away."""
+    use_keyring(null.Keyring() if store == "file" else MemoryKeyring())
+    credentials.put_large("big", "a" * 2500)
+    real_put = credentials.put
+
+    def put(name, value):
+        if name == "big":
+            raise KeyboardInterrupt  # killed just before the head is written
+        real_put(name, value)
+
+    monkeypatch.setattr(credentials, "put", put)
+    with pytest.raises(KeyboardInterrupt):
+        credentials.put_large("big", "b" * 2500)
+    monkeypatch.setattr(credentials, "put", real_put)
+    assert credentials.get_large("big") == "a" * 2500
+    credentials.put_large("big", "c")  # the next save works normally
+    assert credentials.get_large("big") == "c"
+    credentials.delete_large("big")  # signing out also removes the killed save's leftover chunks (file store)
+    if store == "file":
+        assert _file()["secrets"] == {}
+
+
+def test_large_values_saved_in_the_older_layout_still_read_and_are_replaced(use_keyring):
+    use_keyring(null.Keyring())
+    credentials.put("big", "chunks:2")
+    credentials.put("big.0", "ab")
+    credentials.put("big.1", "cd")
+    assert credentials.get_large("big") == "abcd"
+    credentials.put_large("big", "new")
+    secrets = _file()["secrets"]
+    assert credentials.get_large("big") == "new" and "big.0" not in secrets and "big.1" not in secrets
+
+
+def test_process_lock_is_exclusive_takes_over_stale_locks_and_never_blocks_for_good(use_keyring):
+    use_keyring(null.Keyring())
+    lock = credentials.secrets_path().with_name("job.lock")
+    with credentials.process_lock("job", wait_s=0) as held:
+        assert held and lock.exists()
+        with credentials.process_lock("job", wait_s=0.1) as again:
+            assert again is False  # the caller goes on unlocked
+        assert lock.exists()  # a waiter that gave up doesn't release someone else's lock
+    assert not lock.exists()
+    lock.write_text("")
+    os.utime(lock, (0, 0))  # left behind by a killed process
+    with credentials.process_lock("job", wait_s=0, stale_s=60) as held:
+        assert held
+
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")
 def test_file_store_permissions(use_keyring):
     use_keyring(fail.Keyring())

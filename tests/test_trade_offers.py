@@ -425,7 +425,7 @@ def test_offer_context_feeds_manager_profile_stats(yahoo, conn, monkeypatch):
 def test_retro_includes_trade_acceptance_in_a_live_league(yahoo, conn):
     p = done(conn, "trade", {**TRADE, "partner": YTHEM})
     props.record_trade_response(conn, p.ref, "declined", "nope", CONFIRMED + timedelta(hours=2))
-    out = svc._trade_offer_retro(CONFIRMED.date())
+    out = svc._trade_offer_retro(CONFIRMED.date(), CONFIRMED.date() + timedelta(days=6))
     assert out["overall"]["declined"] == 1 and out["by_partner"][0]["partner"] == "Bench Mob"
     assert out["by_ht_premium_band"][0]["band"] == "unknown" and out["this_week"][0]["ref"] == p.ref
 

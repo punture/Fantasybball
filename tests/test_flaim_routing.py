@@ -71,6 +71,25 @@ def test_route_comes_from_settings_or_env(monkeypatch):
     assert not route.is_flaim()
 
 
+@pytest.mark.parametrize(
+    ("chosen", "hint", "never"),
+    [
+        ("flaim", "`fbm flaim leagues --select`", "fbm auth"),  # `fbm auth` needs Yahoo API approval (weeks)
+        ("session", "`fbm yahoo login`, then `fbm league select`", "fbm auth"),
+        ("api", "`fbm auth`", "fbm flaim"),
+        ("carrier-pigeon", "`fbm league select`", "fbm flaim"),
+    ],
+)
+def test_no_league_error_names_the_step_for_the_route(monkeypatch, tmp_path, chosen, hint, never):
+    from fbm.config import load_league_config
+
+    monkeypatch.setenv("FBM_YAHOO_ROUTE", chosen)
+    with pytest.raises(NotConfiguredError) as err:
+        load_league_config(tmp_path / "league.toml")
+    assert str(err.value).startswith("No league configured yet.") and hint in str(err.value)
+    assert never not in str(err.value)
+
+
 def test_save_route_keeps_everything_else(tmp_path):
     path = tmp_path / "settings.toml"
     path.write_text('[owner]\ntimezone = "Asia/Manila"\n[league]\nsource = "yahoo"\n', encoding="utf-8")

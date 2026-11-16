@@ -130,6 +130,51 @@ def test_effective_week_rolls_several_weeks_and_keeps_long_yahoo_weeks():
     assert (eff.week.number, eff.week.end) == (4, date(2026, 11, 22))
 
 
+def test_undated_pairing_keeps_the_opponent_on_calendar_dates():
+    """Flaim sends no dates for a week that isn't current yet: Yahoo's pairing must survive the Monday rollover."""
+    undated = {5: _matchups(5, None, None, SHOHAKU)}
+    lookup = lambda w: week_info_from_matchups(w, undated.get(w, []), ME)  # noqa: E731
+    assert lookup(5) == WeekInfo(5, None, None, SHOHAKU, "yahoo schedule")
+    yahoo = WeekInfo(4, date(2026, 11, 9), date(2026, 11, 15), DIMEBAG)
+    eff = effective_week(yahoo, date(2026, 11, 16), lookup)
+    assert eff.week == WeekInfo(5, date(2026, 11, 16), date(2026, 11, 22), SHOHAKU, "yahoo pairing + calendar")
+    assert "opponent from Yahoo's schedule" in eff.note and "unknown" not in eff.note
+    # an undated NBA Cup week takes the merged calendar period (fantasy_week), still with Yahoo's opponent
+    cup = {7: _matchups(7, None, None, SHOHAKU)}
+    week6 = WeekInfo(6, date(2026, 11, 23), date(2026, 11, 29), DIMEBAG)
+    nxt = next_week_info(week6, lambda w: week_info_from_matchups(w, cup.get(w, []), ME))
+    assert (nxt.start, nxt.end, nxt.opponent_key) == (date(2026, 11, 30), date(2026, 12, 13), SHOHAKU)
+
+
+def test_matchups_of_another_week_never_name_the_opponent():
+    """A feed answering a week-5 request with week 4's scoreboard must not make week 4's opponent week 5's."""
+    current = _matchups(4, None, None, DIMEBAG)
+    assert week_info_from_matchups(5, current, ME) is None
+    nxt = next_week_info(WeekInfo(4, date(2026, 11, 9), date(2026, 11, 15)), lambda w: None)
+    assert nxt.opponent_key is None and nxt.source == "calendar"
+
+
+def test_roll_week_on_flaims_real_undated_scoreboard(monkeypatch):
+    """The real Flaim week-5 scoreboard (no dates) while the snapshot still says week 4: the opponent is kept."""
+    import json
+    from pathlib import Path
+
+    from fbm.flaim.reads import parse_matchups
+
+    lk = "999.l.12345"
+    me, opp = f"{lk}.t.8", f"{lk}.t.5"
+    raw = json.loads((Path(__file__).parent / "fixtures/flaim/real/get_matchups_week5.json").read_text("utf-8"))
+    week5 = parse_matchups(raw, lk)
+    assert all(m.week_start is None for m in week5)
+    teams = [FantasyTeam(k, k, k, []) for k in (me, opp)]
+    league = replace(_league(4, date(2026, 11, 9), date(2026, 11, 15), None), league_key=lk, my_team_key=me)
+    league = replace(league, teams=teams)
+    _yahoo_schedule(monkeypatch, schedule={5: week5}, today=date(2026, 11, 16))
+    rolled = svc._roll_week(league)
+    assert (rolled.week, rolled.week_start, rolled.week_end) == (5, date(2026, 11, 16), date(2026, 11, 22))
+    assert rolled.opponent_key == opp and svc._default_opponent(rolled).team_key == opp
+
+
 # ------------------------------------------------------------------ the league view every tool shares
 
 
@@ -371,11 +416,71 @@ def test_next_week_inconsistent_yahoo_bounds_are_reported_not_hidden(monkeypatch
 
 
 def test_retro_default_week_is_the_finished_yahoo_week(monkeypatch):
-    from datetime import timedelta
+    from fbm.gm.outcomes import retro_week
 
-    from fbm.analytics.week import fantasy_week
+    assert retro_week(MONDAY) == (date(2026, 11, 2), date(2026, 11, 8), None)  # weekly_retro_data's default
 
-    assert fantasy_week(MONDAY - timedelta(days=7))[0] == date(2026, 11, 2)  # weekly_retro_data's default start
+
+@pytest.mark.parametrize(
+    ("today", "start", "end", "repeat"),
+    [
+        (date(2026, 11, 30), date(2026, 11, 23), date(2026, 11, 29), False),  # the NBA Cup matchup starts
+        (date(2026, 12, 7), date(2026, 11, 23), date(2026, 11, 29), True),  # its second half: nothing new ended
+        (date(2026, 12, 9), date(2026, 11, 23), date(2026, 11, 29), True),
+        (date(2026, 12, 14), date(2026, 11, 30), date(2026, 12, 13), False),  # the whole two-week matchup
+        (date(2027, 2, 22), date(2027, 2, 8), date(2027, 2, 14), True),  # All-Star break
+        (date(2027, 3, 1), date(2027, 2, 15), date(2027, 2, 28), False),
+        (date(2026, 11, 18), date(2026, 11, 9), date(2026, 11, 15), False),  # mid-week: the last completed week
+    ],
+)
+def test_retro_week_covers_merged_weeks_whole_and_never_half_played(today, start, end, repeat):
+    from fbm.gm.outcomes import retro_week
+
+    s, e, note = retro_week(today)
+    assert (s, e) == (start, end) and e < today
+    assert (note is not None and "already covered" in note) == repeat
+
+
+def test_retro_week_for_a_given_monday_takes_its_whole_matchup():
+    from fbm.gm.outcomes import retro_week
+
+    assert retro_week(date(2026, 12, 20), date(2026, 12, 7))[:2] == (date(2026, 11, 30), date(2026, 12, 13))
+    _s, _e, note = retro_week(date(2026, 12, 9), date(2026, 11, 30))
+    assert note is not None and "still running" in note
+
+
+def test_weekly_retro_tool_passes_the_merged_weeks_real_end(monkeypatch):
+    from fbm.gm import decision_services
+
+    seen = {}
+
+    def fake_data(conn, pool, cats, week_start, today, punts, names=None, week_end=None):
+        seen.update(start=week_start, end=week_end)
+        return {"week_et": f"{week_start}..{week_end}"}
+
+    monkeypatch.setattr(svc, "nba_today", lambda: date(2026, 12, 14))
+    grading = SimpleNamespace(pool=None, cfg=SimpleNamespace(categories=[]), projections=pd.DataFrame({"name": []}))
+    monkeypatch.setattr(svc, "_grading_ctx", lambda: grading)
+    monkeypatch.setattr(decision_services, "sync_yahoo_results", lambda: {})
+    monkeypatch.setattr(svc, "verify_moves", lambda sync_first=True: {})
+    monkeypatch.setattr(svc, "_conn", lambda: None)
+    monkeypatch.setattr(svc, "_strategy_punts", lambda punts: ())
+    monkeypatch.setattr(svc.outcomes, "weekly_retro_data", fake_data)
+    monkeypatch.setattr(svc, "_is_yahoo", lambda: True)
+    monkeypatch.setattr(svc, "_trade_offer_retro", lambda start, end: seen.update(offers=(start, end)) or {})
+    monkeypatch.setattr(svc, "signal_grades_tool", lambda: {})
+    out = svc.weekly_retro_data_tool()
+    assert seen == {
+        "start": date(2026, 11, 30),
+        "end": date(2026, 12, 13),
+        "offers": (date(2026, 11, 30), date(2026, 12, 13)),
+    }
+    assert out["week_et"] == "2026-11-30..2026-12-13" and out["week_complete"] and "week_note" not in out
+    monkeypatch.setattr(svc, "nba_today", lambda: date(2026, 12, 7))
+    out = svc.weekly_retro_data_tool()
+    assert (seen["start"], seen["end"]) == (date(2026, 11, 23), date(2026, 11, 29)) and "already covered" in out[
+        "week_note"
+    ]
 
 
 def test_yahoo_results_sync_includes_the_finished_week(monkeypatch):
