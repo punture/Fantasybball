@@ -63,6 +63,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
+# Pass native arguments the Windows PowerShell 5.1 way, which ConvertTo-ArgvJson relies on: PowerShell 7.3+ would
+# escape the \" in a --command-argv value a second time.
+if (Get-Variable -Name PSNativeCommandArgumentPassing -ErrorAction SilentlyContinue) { $PSNativeCommandArgumentPassing = 'Legacy' }
 
 $MinCommandJobs = [version]'2026.6.5'  # first OpenClaw with command cron jobs (runs a program, no model call)
 $MinCronFlags = [version]'2026.2.17'   # first OpenClaw with --exact on cron jobs (needed by the agent-turn fallback)
@@ -368,10 +371,29 @@ function Install-Skill {
     $script:State['skill_dir'] = $script:SkillDir
     Write-Ok "Skill 'fbm' in $($script:SkillDir) (with FBM's playbooks in references\)"
     if ($DryRun -or (-not $script:OcFound)) { return }
-    if ((Invoke-Native $script:OcExe @('skills', 'info', 'fbm')).Code -eq 0) {
+    # With several agents OpenClaw needs --agent here; an OpenClaw without the option gets the plain command.
+    $r = Invoke-Native $script:OcExe @('skills', 'info', 'fbm', '--agent', $Agent)
+    if ($r.Code -ne 0) { $r = Invoke-Native $script:OcExe @('skills', 'info', 'fbm') }
+    if ($r.Code -eq 0) {
         Write-Ok 'OpenClaw sees the skill (start a new chat with /new if it''s open)'
+    } elseif ((Get-OpenClawConfig 'skills.load.watch') -eq 'false') {
+        Write-Warn 'OpenClaw doesn''t list the ''fbm'' skill yet: skills.load.watch is off, so restart the Gateway, then start a new chat (/new).'
     } else {
         Write-Warn 'OpenClaw doesn''t list the ''fbm'' skill yet. Start a new chat (/new) or restart the Gateway; if it''s still missing, re-run with -SkillDir <your agent workspace>\skills\fbm.'
+    }
+    Test-SkillAllowlist
+}
+
+# A skill allowlist (agents.entries.<agent>.skills, else agents.defaults.skills) hides every skill it doesn't name.
+function Test-SkillAllowlist {
+    foreach ($key in @("agents.entries.$Agent.skills", 'agents.defaults.skills')) {
+        $r = Invoke-Native $script:OcExe @('config', 'get', $key, '--json') -NoStderr
+        if (($r.Code -ne 0) -or ($r.Text -notmatch '(?s)^\[.*\]$')) { continue }  # not set: no JSON array
+        try { $names = @(foreach ($v in ($r.Text | ConvertFrom-Json)) { [string]$v }) } catch { return }
+        if ($names -notcontains 'fbm') {
+            Write-Warn "Agent '$Agent' only uses the skills listed in $key, and 'fbm' isn't one: add it there (a list in agents.entries.$Agent.skills replaces the defaults), then restart the Gateway."
+        }
+        return
     }
 }
 
@@ -467,16 +489,20 @@ function Test-FbmCommand([string]$Words) {
     return $script:FbmHas[$Words]
 }
 
-# cmd.exe runs Windows command jobs from the FBM folder, so a path inside it needs no quoting (paths may have spaces).
-function Get-JobProgram {
-    $prefix = $script:Repo + '\'
-    if ($script:FbmBin.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-        return '.\' + $script:FbmBin.Substring($prefix.Length)
+# The --command-argv value: a JSON array OpenClaw runs as is, with no shell (a --command job runs `sh -lc` even on
+# Windows, and sh eats a Windows path's backslashes). It has to arrive as one argument through Windows PowerShell 5.1,
+# which doesn't escape quotes inside an argument, and the openclaw.cmd shim (cmd.exe): so nothing outside
+# [A-Za-z0-9_.:/-] goes out literally. Spaces and other characters become JSON \u escapes, and each JSON quote is \",
+# which Node reads back as ".
+function ConvertTo-ArgvJson([string[]]$Words) {
+    $items = foreach ($word in $Words) {
+        $text = New-Object System.Text.StringBuilder
+        foreach ($ch in $word.ToCharArray()) {
+            if ($ch -cmatch '[A-Za-z0-9_.:/-]') { [void]$text.Append($ch) } else { [void]$text.Append(('\u{0:x4}' -f [int]$ch)) }
+        }
+        '\"' + $text.ToString() + '\"'
     }
-    if ($script:FbmBin -match '\s') {
-        Stop-Install "The FBM program path has spaces and is outside $($script:Repo); use the FBM checkout's own .venv."
-    }
-    return $script:FbmBin
+    return '[' + (@($items) -join ',') + ']'
 }
 
 function Register-Jobs {
@@ -498,7 +524,7 @@ function Register-Jobs {
         }
     }
     Get-ExistingJobs
-    $program = Get-JobProgram
+    $program = $script:FbmBin.Replace('\', '/')  # Windows takes forward slashes too; the JSON stays readable
     foreach ($job in $JobTable) {
         $name = $job.Name
         if (-not (Test-JobSelected $name)) { continue }
@@ -523,8 +549,9 @@ function Register-Jobs {
             $argList = @('cron', 'add', '--name', $name, '--cron', $expr, '--tz', $JobTz, '--exact', '--agent', $Agent,
                 '--session', 'isolated', '--message', $message, '--announce', '--channel', 'telegram', '--to', $script:ChatId)
         } else {
+            $argv = ConvertTo-ArgvJson (@($program) + $job.Run.Split(' '))
             $argList = @('cron', 'add', '--name', $name, '--cron', $expr, '--tz', $JobTz, '--exact',
-                '--command', "$program $($job.Run)", '--command-cwd', $script:Repo, '--timeout-seconds', [string]$job.Timeout)
+                '--command-argv', $argv, '--command-cwd', $script:Repo, '--timeout-seconds', [string]$job.Timeout)
             if ($job.Delivery -eq 'announce') {
                 $argList += @('--announce', '--channel', 'telegram', '--to', $script:ChatId)
             } else {

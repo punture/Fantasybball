@@ -163,11 +163,15 @@ itself, your league data and other OpenClaw settings are untouched.
   do, and their approval prompts never reach chat.
 - **Sandbox mode.** If your agent runs `exec` in a sandbox (a container), it can't see FBM on the host. Run FBM's
   commands on the Gateway host: `openclaw config set tools.exec.host gateway`, or `/exec host=gateway` in the chat.
-- **The skill doesn't show up.** `openclaw skills info fbm`; start a new chat with `/new` or restart the Gateway. With
-  several agents or a custom workspace, pass `--skill-dir <that agent's workspace>/skills/fbm`.
+- **The skill doesn't show up.** `openclaw skills info fbm --agent main`; start a new chat with `/new` or restart the
+  Gateway (a restart is needed when `skills.load.watch` is off). With several agents or a custom workspace, pass
+  `--skill-dir <that agent's workspace>/skills/fbm`. If the agent has a skill allowlist (`agents.entries.<id>.skills`,
+  else `agents.defaults.skills`), add `fbm` to it; `install.ps1` warns when it's missing.
 - **Windows.** The Windows Hub's "Set up locally" option runs the Gateway inside WSL: install FBM inside that WSL
   distro (clone, `uv sync`, `uv run fbm setup`) and run `openclaw/install.sh` there. With a native Windows Gateway use
-  `install.ps1`: jobs run `.\.venv\Scripts\fbm.exe` through `cmd.exe` from the FBM folder. Chat commands run in
+  `install.ps1`: jobs run `.venv\Scripts\fbm.exe` directly (an exact argv, no shell) from the FBM folder. If jobs from
+  an older `install.ps1` fail with exit code 127 and `..venvScriptsfbm.exe: command not found` (OpenClaw runs those
+  jobs through `sh`, which drops the backslashes), re-run the installer. Chat commands run in
   PowerShell; install PowerShell 7 (`pwsh`, which OpenClaw prefers), because Windows PowerShell 5.1 strips the double
   quotes inside JSON arguments such as `payload_json`, so creating proposals from chat fails there.
 - **Sign-ins on a headless machine.** FBM keeps credentials in the OS credential store; where none is available (a

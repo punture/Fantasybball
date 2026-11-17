@@ -356,7 +356,11 @@ def test_powershell_script_is_structurally_sane():
             assert code.count(open_) == code.count(close), (name, open_)
         assert "&&" not in code and "??" not in code  # PowerShell 7-only operators
     install = (ROOT / "openclaw" / "install.ps1").read_text(encoding="utf-8")
-    assert "--command-argv" not in install  # JSON in native arguments loses its quotes on PowerShell 5.1
+    # OpenClaw runs --command jobs through `sh -lc` even on Windows, and sh drops a Windows path's backslashes. So jobs
+    # use --command-argv, whose JSON goes through ConvertTo-ArgvJson: Windows PowerShell 5.1 would strip raw quotes.
+    # test_openclaw_install_ps1.py checks the round trip on Windows.
+    assert "'--command'," not in install
+    assert "$argv = ConvertTo-ArgvJson" in install and "'--command-argv', $argv" in install
 
 
 def test_bash_installer_is_valid_bash():
