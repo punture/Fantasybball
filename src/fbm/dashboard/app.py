@@ -13,6 +13,7 @@ import streamlit as st
 
 from fbm.config import MEMORY_DIR
 from fbm.constants import C
+from fbm.dashboard.helpers import opponent_choices
 from fbm.gm import memory
 from fbm.gm import services as svc
 
@@ -144,9 +145,9 @@ def page_overview() -> None:
 
 def page_matchup() -> None:
     ov = call(svc.league_overview)
-    teams = {t["name"]: t["key"] for t in ov["teams"] if t["key"] != ov["my_team_key"]}
+    teams, current = opponent_choices(ov)
     c1, c2 = st.columns([3, 1])
-    opp_name = c1.selectbox("Opponent", list(teams))
+    opp_name = c1.selectbox("Opponent", list(teams), index=current)
     n = c2.select_slider("Simulations", [2000, 5000, 10000, 20000], value=10000)
     sim = call(cached, "simulate_matchup_tool", teams[opp_name], None, n, False)
     st.caption(
