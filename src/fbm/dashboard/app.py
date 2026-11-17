@@ -118,7 +118,7 @@ def page_overview() -> None:
     m3.metric("Swing categories", ", ".join(sim["swing_categories"]) or "none")
     st.plotly_chart(
         odds_chart({c["cat"]: c["p_win"] for c in sim["categories"]}, "Category win probability"),
-        use_container_width=True,
+        width="stretch",
     )
 
     left, right = st.columns(2)
@@ -136,7 +136,7 @@ def page_overview() -> None:
         st.dataframe(
             pd.DataFrame(sorted(ov["data_freshness"].items()), columns=["Job", "Last run"]),
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
         y = ov["yahoo"]
         st.caption(f"Yahoo: {y['status']} · roster changes: {y.get('roster_changes', 'made by you in Yahoo')}")
@@ -198,9 +198,9 @@ def page_matchup() -> None:
         columns={"cat": "Cat", "me_mean": "Me", "opp_mean": "Opp", "p_win": "Win", "p_tie": "Tie", "p_loss": "Loss"}
     )
     styled = df.style.map(color_prob, subset=["Win"]).format({"Win": "{:.0%}", "Tie": "{:.0%}", "Loss": "{:.0%}"})
-    st.dataframe(styled, hide_index=True, use_container_width=True)
+    st.dataframe(styled, hide_index=True, width="stretch")
     st.plotly_chart(
-        odds_chart({c["cat"]: c["p_win"] for c in sim["categories"]}, "P(win) by category"), use_container_width=True
+        odds_chart({c["cat"]: c["p_win"] for c in sim["categories"]}, "P(win) by category"), width="stretch"
     )
 
 
@@ -228,7 +228,7 @@ def page_roster() -> None:
     st.dataframe(
         df.style.map(color_value, subset=value_cols).format(precision=2),
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         height=520,
     )
     lu = call(svc.optimize_lineup)
@@ -256,7 +256,7 @@ def page_players() -> None:
     st.dataframe(
         df.drop(columns=["id"]).style.map(color_value, subset=["value"]).format(precision=2),
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         height=520,
     )
     name = st.selectbox("Player card", [""] + list(df["player"]))
@@ -299,7 +299,7 @@ def page_players() -> None:
                 labels={"x": "", "y": "G-score"},
                 title="G-score by category",
             ),
-            use_container_width=True,
+            width="stretch",
         )
         st.write("Per-game projection:", card["per_game_projection"])
         if card["recent_news"]:
@@ -337,9 +337,7 @@ def page_streaming() -> None:
     )
     m3.metric("Games started", r["games_started"]["after"], r["games_started"]["after"] - r["games_started"]["before"])
     if r["moves"]:
-        st.dataframe(
-            pd.DataFrame(r["moves"]).drop(columns=["add_id", "drop_id"]), hide_index=True, use_container_width=True
-        )
+        st.dataframe(pd.DataFrame(r["moves"]).drop(columns=["add_id", "drop_id"]), hide_index=True, width="stretch")
     else:
         st.info("No move clears the minimum gain — hold.")
     for note in r["notes"]:
@@ -364,7 +362,7 @@ def show_trade(t: dict[str, Any]) -> None:
         }
         for s in (me, them)
     ]
-    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
     deltas = {KEY_TO_LABEL.get(k, k): v for k, v in me["cat_win_rate_delta"].items()}
     fig = px.bar(
         x=list(deltas),
@@ -373,7 +371,7 @@ def show_trade(t: dict[str, Any]) -> None:
         title="My category win-rate change",
     )
     fig.update_layout(height=260, margin=dict(t=40, b=10))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     for note in t["notes"]:
         st.caption(f"• {note}")
 
@@ -420,7 +418,7 @@ def _yahoo_league_panels() -> None:
         }
         for r in standings["standings"]
     ]
-    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
     board = call(svc.scoreboard_tool)
     st.subheader(f"Live scoreboard · week {board['week']}")
     for m in board["matchups"]:
@@ -431,7 +429,7 @@ def _yahoo_league_panels() -> None:
             df = pd.DataFrame(
                 [{"Cat": c["category"], **c["values"], "Leader": c["leader"] or "tie"} for c in m["categories"]]
             )
-            st.dataframe(df, hide_index=True, use_container_width=True)
+            st.dataframe(df, hide_index=True, width="stretch")
 
 
 def page_league() -> None:
@@ -452,14 +450,14 @@ def page_league() -> None:
         title="Category win rate vs the league (typical week)",
     )
     fig.update_layout(height=520, coloraxis_showscale=False)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     summary = pd.DataFrame(
         [{"Team": t["team"], "Expected cats": t["expected_cats"], "P(win week)": t["p_win_week"]} for t in teams]
     )
     st.dataframe(
         summary.style.format({"P(win week)": "{:.0%}", "Expected cats": "{:.2f}"}),
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
     st.caption(r["method"])
 
@@ -494,7 +492,7 @@ def page_strategy() -> None:
         xaxis={"title": "Expected categories won per week"},
     )
     fig.update_xaxes(range=[min(s["expected_cats"] for s in rows) - 0.3, max(s["expected_cats"] for s in rows) + 0.1])
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     table = pd.DataFrame(
         [
             {
@@ -516,7 +514,7 @@ def page_strategy() -> None:
             {"Exp cats": "{:.2f}", "vs strategy": "{:+.2f}", "P(win wk)": "{:.0%}"}
         ),
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
     heat = pd.DataFrame([s["cat_win_rates"] for s in rows], index=names)
     fig2 = px.imshow(
@@ -529,15 +527,15 @@ def page_strategy() -> None:
         title="Category win rate vs the league under each build",
     )
     fig2.update_layout(height=80 + 34 * len(rows), coloraxis_showscale=False)
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width="stretch")
     best = next((s for s in rows if s["build"] == rec["build"]), None)
     if best and (best["buy_targets"] or best["sell_candidates"]):
         with st.expander(f"Trade-market edges under {best['build']} (market rank → build rank)"):
             b1, b2 = st.columns(2)
             b1.markdown("**Buy targets**")
-            b1.dataframe(pd.DataFrame(best["buy_targets"]), hide_index=True, use_container_width=True)
+            b1.dataframe(pd.DataFrame(best["buy_targets"]), hide_index=True, width="stretch")
             b2.markdown("**Sell candidates**")
-            b2.dataframe(pd.DataFrame(best["sell_candidates"]), hide_index=True, use_container_width=True)
+            b2.dataframe(pd.DataFrame(best["sell_candidates"]), hide_index=True, width="stretch")
     st.caption(r["method"])
 
 
@@ -589,9 +587,7 @@ def page_learning() -> None:
     g = call(svc.grade_decisions_tool, 60, 0)
     if g["decisions"]:
         cols = ("ref", "title", "window_et", "games_counted", "delta", "grade")
-        st.dataframe(
-            pd.DataFrame([{k: d[k] for k in cols} for d in g["decisions"]]), hide_index=True, use_container_width=True
-        )
+        st.dataframe(pd.DataFrame([{k: d[k] for k in cols} for d in g["decisions"]]), hide_index=True, width="stretch")
     else:
         st.caption("No executed moves to grade yet.")
     st.caption(g["scale"])
@@ -615,7 +611,7 @@ def page_learning() -> None:
         title="Reliability (points on the diagonal = well calibrated)",
     )
     fig.add_shape(type="line", x0=0, y0=0, x1=1, y1=1, line=dict(dash="dot", color="gray"))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def page_memory() -> None:
@@ -635,9 +631,9 @@ def page_memory() -> None:
             if intel["note"]:
                 st.caption(intel["note"])
             st.markdown("**Activity ranking**")
-            st.dataframe(pd.DataFrame(intel["activity_ranking"]), hide_index=True, use_container_width=True)
+            st.dataframe(pd.DataFrame(intel["activity_ranking"]), hide_index=True, width="stretch")
             st.markdown(f"**Best trade partners** — {intel['partner_order']}")
-            st.dataframe(pd.DataFrame(intel["best_trade_partners"]), hide_index=True, use_container_width=True)
+            st.dataframe(pd.DataFrame(intel["best_trade_partners"]), hide_index=True, width="stretch")
         for name, text in memory.manager_notes(4000).items():
             with st.expander(name):
                 st.markdown(text)
@@ -663,11 +659,11 @@ def page_playoffs() -> None:
     )
     fig.update_layout(height=760, coloraxis_showscale=False)
     left, right = st.columns([1, 1])
-    left.plotly_chart(fig, use_container_width=True)
+    left.plotly_chart(fig, width="stretch")
     right.dataframe(
         pd.DataFrame(r["players"]).style.map(color_value, subset=["playoff_value"]).format(precision=2),
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         height=760,
     )
 
@@ -680,7 +676,7 @@ def page_constants() -> None:
     df = pd.DataFrame(r["constants"])[
         ["key", "value", "default", "overridden", "unit", "kind", "description", "source"]
     ]
-    st.dataframe(df, hide_index=True, use_container_width=True, height=760)
+    st.dataframe(df, hide_index=True, width="stretch", height=760)
 
 
 PAGES = {
