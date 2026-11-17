@@ -12,7 +12,7 @@ Dates are **US/Eastern** NBA game days (`YYYY-MM-DD`).
 | `fbm health [--notify-on-fail]` | Health checks (OK/WARN/FAIL): data freshness, Yahoo access/snapshot, league categories FBM can't model (FAIL when a scored one is ignored), Hashtag Basketball gate, stale proposals, missed runs, scheduled jobs on the computer's clock, storage. Exits 1 on any FAIL; `--notify-on-fail` also messages the FAIL checks through `[notify] channels` (once a day per set of failures) |
 | `fbm constants` | Every tunable engine constant (value, kind, source); override in `config/constants.toml` |
 | `fbm backup [--dest DIR]` | Zip `memory/`, `reports/`, settings, league config and the NBA database to a local folder (default `data/backups/`; no secrets) |
-| `fbm dashboard [--port 8501]` | Launch the local Streamlit dashboard |
+| `fbm dashboard [--port 8501] [--address 127.0.0.1]` | Launch the Streamlit dashboard. It stays on this computer unless `--address 0.0.0.0` opens it to other devices on your network (a phone on your Wi-Fi). Anyone who can open it can approve or reject proposals, so allow it through your firewall only on networks you trust |
 | `fbm migrate overhaul [--league-id ID] [--enable/--no-enable] [--yahoo/--no-yahoo]` | One-off move to the Hashtag data layer + decision calibration: backup, `[hashtag]` settings (`--league-id` defaults to the Yahoo league id), decision log, and (`--yahoo`) cache Yahoo finals and daily lineups to re-grade legacy forecasts |
 
 ## AI agent wiring (`fbm agent`)

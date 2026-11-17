@@ -1446,8 +1446,16 @@ def buysell_cmd(
 
 
 @app.command()
-def dashboard(port: int = typer.Option(8501, help="Local port."), open_browser: bool = typer.Option(True)) -> None:
-    """Launch the local Streamlit dashboard."""
+def dashboard(
+    port: int = typer.Option(8501, help="Port."),
+    open_browser: bool = typer.Option(True),
+    address: str = typer.Option(
+        "127.0.0.1",
+        help="Address to listen on. The default keeps the dashboard on this computer. 0.0.0.0 lets other devices on "
+        "your network open it, and anyone who can open it can approve or reject proposals.",
+    ),
+) -> None:
+    """Launch the Streamlit dashboard (this computer only, unless --address says otherwise)."""
     from importlib.resources import files
 
     app_path = str(files("fbm.dashboard").joinpath("app.py"))
@@ -1457,6 +1465,8 @@ def dashboard(port: int = typer.Option(8501, help="Local port."), open_browser: 
         "streamlit",
         "run",
         app_path,
+        "--server.address",
+        address,
         "--server.port",
         str(port),
         "--server.headless",
@@ -1464,7 +1474,8 @@ def dashboard(port: int = typer.Option(8501, help="Local port."), open_browser: 
         "--browser.gatherUsageStats",
         "false",
     ]
-    console.print(f"Dashboard → http://localhost:{port}  (Ctrl+C to stop)")
+    host = "localhost" if address in ("127.0.0.1", "0.0.0.0") else address
+    console.print(f"Dashboard → http://{host}:{port}  (Ctrl+C to stop)")
     subprocess.run(cmd, check=False)
 
 
