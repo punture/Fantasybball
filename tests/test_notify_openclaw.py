@@ -1,5 +1,6 @@
 """OpenClaw delivery: argv (never a shell), --silent, failures that let the dispatcher fall back, binary lookup."""
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -21,13 +22,14 @@ class FakeRun:
         return subprocess.CompletedProcess(cmd, self.code, self.out, self.err)
 
 
-def test_send_runs_message_send_without_a_shell():
+def test_send_runs_message_send_without_a_shell(tmp_path):
+    binary = tmp_path / "oc" / "openclaw"  # absolute on every OS ("/opt/oc/..." has no drive, so not on Windows)
     run = FakeRun()
-    n = openclaw.send("**Hi**", silent=True, settings=SETTINGS, runner=run, resolver=lambda b: ["/opt/oc/openclaw"])
+    n = openclaw.send("**Hi**", silent=True, settings=SETTINGS, runner=run, resolver=lambda b: [str(binary)])
     cmd, kw = run.calls[0]
     assert n == 1
     assert cmd == [
-        "/opt/oc/openclaw",
+        str(binary),
         "message",
         "send",
         "--channel",
@@ -39,7 +41,7 @@ def test_send_runs_message_send_without_a_shell():
         "--silent",
     ]
     assert kw["timeout"] == openclaw.TIMEOUT_S and "shell" not in kw and kw["stdin"] is subprocess.DEVNULL
-    assert kw["env"]["PATH"].startswith("/opt/oc")  # npm installs need node next to the binary
+    assert kw["env"]["PATH"].split(os.pathsep)[0] == str(binary.parent)  # npm installs need node next to the binary
     openclaw.send("x", settings=SETTINGS, runner=run, resolver=lambda b: ["oc"])
     assert "--silent" not in run.calls[-1][0]
 
